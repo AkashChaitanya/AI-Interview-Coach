@@ -1,0 +1,48 @@
+{
+  "evaluation_criteria": {
+    "technical_depth": {
+      "weight": 0.25,
+      "description": "Accuracy of technical terms, correctness of algorithmic complexity, and grasp of foundational mechanics."
+    },
+    "star_structure": {
+      "weight": 0.25,
+      "description": "Adherence to Situation, Task, Action, and Result framing with clear context and measurable outcomes."
+    },
+    "clarity_fluency": {
+      "weight": 0.2,
+      "description": "Sentence structure, readability, absence of excessive filler words (um, uh, like), and optimal speech pace (120-160 WPM)."
+    },
+    "relevance_keywords": {
+      "weight": 0.2,
+      "description": "Coverage of expected domain terminology and addressing the core prompt directly."
+    },
+    "sentiment_confidence": {
+      "weight": 0.1,
+      "description": "Tone of confidence, professional assertiveness, and constructive problem-solving mindset."
+    }
+  },
+  "star_definitions": {
+    "Situation": "Sets the scene, explains the background context, company, project, or problem environment.",
+    "Task": "Defines the specific responsibility, objective, challenge, or expectation assigned to the candidate.",
+    "Action": "Explains the concrete actions, strategies, technical tools, leadership, and steps taken by the candidate.",
+    "Result": "Quantifies the outcome, metrics improved, business value delivered, lessons learned, and team impact."
+  },
+  "filler_words": [
+    "um",
+    "uh",
+    "er",
+    "ah",
+    "like",
+    "you know",
+    "basically",
+    "actually",
+    "literally",
+    "honestly",
+    "sort of",
+    "kind of",
+    "i mean",
+    "right",
+    "okay so",
+    "so yeah"
+  ]
+}

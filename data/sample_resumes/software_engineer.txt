@@ -1,0 +1,32 @@
+Alex Chen
+Software Engineer | Full-Stack & Distributed Systems
+Email: alex.chen@example.com | GitHub: github.com/alexchen-dev | LinkedIn: linkedin.com/in/alexchen
+
+SUMMARY
+Results-oriented Software Engineer with 4 years of experience designing and scaling microservices, distributed caching, and REST/gRPC APIs in Python, Go, and TypeScript. Passionate about clean code architecture, performance profiling, and fault-tolerant cloud backends.
+
+TECHNICAL SKILLS
+Languages: Python, Go, TypeScript, SQL, Bash
+Frameworks: FastAPI, Flask, Django, React, Node.js
+Databases & Cache: PostgreSQL, Redis, MongoDB, Elasticsearch
+Cloud & DevOps: Docker, Kubernetes, AWS (EC2, S3, RDS, Lambda), GitHub Actions, Terraform
+Tools: Kafka, Celery, Prometheus, Grafana, Git
+
+EXPERIENCE
+Software Engineer | CloudScale Tech (2022 - Present)
+- Architected and deployed an asynchronous event-driven payment processing pipeline using FastAPI, Celery, and Redis, reducing checkout latency by 38% for 2M daily active users.
+- Designed distributed rate limiting and idempotency middleware with Redis Lua scripts, eliminating duplicate transaction errors.
+- Reduced p99 database query response times from 450ms to 65ms by refactoring complex PostgreSQL queries and implementing targeted composite B-Tree indexes.
+- Led automated CI/CD pipeline modernization with Docker and GitHub Actions, improving team deployment frequency from bi-weekly to multiple times per day.
+
+Junior Backend Developer | DataFlow Labs (2020 - 2022)
+- Built high-throughput data ingestion microservices in Python consuming from Apache Kafka clusters.
+- Developed comprehensive unit and integration test suites achieving 88% test coverage using pytest and factory-boy.
+- Collaborated with frontend engineers to standardize OpenAPI/Swagger documentation and REST endpoints.
+
+PROJECTS
+- Distributed URL Shortener: High-performance URL shortener in Go and Redis with Base62 encoding, handling 15,000 req/sec benchmarked with k6.
+- Real-Time Collaborative Canvas: WebSocket-powered multi-user whiteboard application using React, Canvas API, and Node.js with CRDT synchronization.
+
+EDUCATION
+B.S. in Computer Science | University of Technology (2016 - 2020)

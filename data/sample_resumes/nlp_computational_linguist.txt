@@ -1,0 +1,33 @@
+Priya Sharma
+Computational Linguist & NLP Research Engineer
+Email: priya.sharma@example.com | Hugging Face: hf.co/priyasharma | LinkedIn: linkedin.com/in/priyasharma-nlp
+
+SUMMARY
+Computational Linguist and Machine Learning Engineer specializing in Natural Language Processing, Transformer architectures, and Large Language Model (LLM) fine-tuning. Experienced in tokenization algorithms, cross-lingual transfer learning, semantic search, and speech synthesis pipelines.
+
+TECHNICAL SKILLS
+NLP & Deep Learning: Hugging Face Transformers, PyTorch, spaCy, NLTK, PEFT/LoRA, vLLM, LangChain, SentenceTransformers
+Speech & Audio: Whisper, Wav2Vec2, FastSpeech, gTTS, pyttsx3, Librosa
+Linguistics: Morphological Parsing, Dependency Syntax, Phonetics/Phonology, Subword Tokenization (BPE/WordPiece), Discourse Analysis
+Languages: Python, C++, R, SQL
+Tools & Platforms: Docker, Weights & Biases, FastAPI, Streamlit, Git
+
+EXPERIENCE
+NLP Engineer | SemanticAI Solutions (2023 - Present)
+- Fine-tuned open-source LLMs (Llama 3 8B, Mistral 7B) using QLoRA and DPO for domain-specific medical text summarization, boosting ROUGE-2 scores by 14.2%.
+- Designed and benchmarked a hybrid Retrieval-Augmented Generation (RAG) system combining dense vector search (BGE embeddings) and BM25 with cross-encoder re-ranking, reducing hallucination rates by 42%.
+- Implemented streaming automatic speech recognition (ASR) with Whisper and WebSockets, achieving real-time transcription with sub-300ms latency.
+- Authored internal data curation and deduplication pipelines handling 50M+ multilingual tokens using MinHash and sentence-transformers.
+
+Research Assistant | Computational Linguistics Lab (2021 - 2023)
+- Investigated zero-shot cross-lingual syntactic transfer for low-resource Indic languages using XLM-RoBERTa and universal dependency treebanks.
+- Developed custom subword tokenizers and morphology-aware segmentation rules improving named entity recognition F1 by 8.5% on non-Latin scripts.
+- Mentored 6 undergraduate students in computational semantics, sentiment analysis, and transformer attention visualizations.
+
+PUBLICATIONS & PROJECTS
+- Low-Resource Syntactic Parsing: Published at EMNLP Workshop on Multilingual NLP (2023).
+- VoiceSense: Open-source speech emotion recognition toolkit using Wav2Vec2 features and PyTorch with 84% accuracy on IEMOCAP dataset.
+
+EDUCATION
+M.S. in Computational Linguistics | State University (2021 - 2023)
+B.Tech in Computer Science & Engineering | National Institute (2017 - 2021)

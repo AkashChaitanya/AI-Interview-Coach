@@ -1,0 +1,20 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment & configs
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# Audio cache & local temp
+.audio_cache/
+.cache/
+.pytest_cache/
+
+# Streamlit
+.streamlit/
