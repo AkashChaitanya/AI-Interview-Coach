@@ -29,6 +29,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   initWaveformVisualizer();
   await startNewSession();
   setupDragAndDrop();
+  // Kick off AI connectivity check and repeat every 60 seconds
+  checkAIConnectivity();
+  setInterval(checkAIConnectivity, 60000);
+  // Close connectivity panel when clicking outside
+  document.addEventListener("click", (e) => {
+    const panel = document.getElementById("connectivityPanel");
+    const badge  = document.getElementById("aiConnectivityBadge");
+    if (panel && !panel.classList.contains("hidden") &&
+        !panel.contains(e.target) && !badge.contains(e.target)) {
+      panel.classList.add("hidden");
+    }
+  });
 });
 
 // --- Tab Switching ---
@@ -71,9 +83,44 @@ async function loadPersonas() {
       select.appendChild(opt);
     });
     updatePersonaDisplay();
+    renderCustomPersonasList();
   } catch (e) {
     console.error("Failed to load personas:", e);
   }
+}
+
+/**
+ * Renders a list of custom personas below the select with 🗑️ delete buttons.
+ * Built-in personas are not shown here (they cannot be deleted).
+ */
+function renderCustomPersonasList() {
+  const container = document.getElementById("customPersonasList");
+  if (!container) return;
+  const customEntries = Object.entries(state.personas).filter(([, p]) => p.built_in === false);
+  if (customEntries.length === 0) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  container.classList.remove("hidden");
+  container.innerHTML = `
+    <div class="text-[10px] text-slate-500 uppercase font-semibold tracking-wider pt-1 pb-0.5">Custom Interviewers</div>
+  `;
+  customEntries.forEach(([key, p]) => {
+    const row = document.createElement("div");
+    row.className = "flex items-center justify-between gap-2 bg-[#0E131F] rounded-lg px-2.5 py-1.5 border border-white/5";
+    row.innerHTML = `
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="text-sm shrink-0">${p.avatar || "🧑‍🏫"}</span>
+        <span class="text-[11px] text-slate-200 font-medium truncate">${key.split(" (")[0]}</span>
+        <span class="text-[10px] text-purple-400 shrink-0">Custom</span>
+      </div>
+      <button onclick="deletePersona(${JSON.stringify(key)})"
+              title="Delete this interviewer"
+              class="text-slate-500 hover:text-rose-400 text-xs transition-colors shrink-0">🗑️</button>
+    `;
+    container.appendChild(row);
+  });
 }
 
 function onPersonaChange() {
@@ -431,7 +478,35 @@ function renderEvaluationResults(evalData, aiReply) {
   const panel = document.getElementById("evaluationResultsPanel");
   panel.classList.remove("hidden");
 
-  // Overall Score
+  // ── 1. AI Validation Verdict Banner ────────────────────────────────────────
+  const verdict = aiReply.validation_verdict || "";
+  const verdictBanner = document.getElementById("validationVerdictBanner");
+  verdictBanner.classList.remove("hidden");
+
+  const verdictConfig = {
+    "Strong / Correct":          { icon: "✅", color: "bg-emerald-500/10 border-emerald-500/30", label: "Strong & Correct", desc: "Excellent! Your answer demonstrates solid technical understanding." },
+    "Factually Incorrect":       { icon: "❌", color: "bg-rose-500/10 border-rose-500/30",    label: "Factually Incorrect", desc: "The AI detected a factual error. Review the exemplar answer below." },
+    "Creative / Unconventional": { icon: "💡", color: "bg-amber-500/10 border-amber-500/30",  label: "Creative / Unconventional", desc: "Interesting angle! The interviewer is engaging with your unique perspective." },
+    "Partially Correct":         { icon: "⚡", color: "bg-cyan-500/10 border-cyan-500/30",    label: "Partially Correct", desc: "Good foundation, but key aspects are missing or incomplete." },
+    "Off-Topic / Vague":         { icon: "🌫️", color: "bg-slate-500/10 border-slate-500/30",  label: "Off-Topic / Vague", desc: "The response needs to be more focused and relevant to the question." },
+  };
+  const vc = verdictConfig[verdict] || { icon: "🤖", color: "bg-purple-500/10 border-purple-500/30", label: verdict || "AI Analyzed", desc: "AI has assessed your response." };
+  verdictBanner.className = `flex items-center gap-3 p-3.5 rounded-xl border transition-all ${vc.color}`;
+  document.getElementById("verdictIcon").innerText = vc.icon;
+  document.getElementById("verdictLabel").innerText = vc.label;
+  document.getElementById("verdictDescription").innerText = vc.desc;
+
+  // ── 2. Running Subtitle / Typewriter Feedback ───────────────────────────────
+  const feedbackBox = document.getElementById("conversationalFeedbackBox");
+  feedbackBox.classList.remove("hidden");
+  // Set persona avatar in the feedback box
+  const currentP = state.personas[state.currentPersonaKey] || {};
+  document.getElementById("subtitlePersonaAvatar").innerText = currentP.avatar || "👩‍🔬";
+
+  const feedbackText = aiReply.conversational_feedback || aiReply.acknowledgment || "Thank you for your response. Let me share my thoughts...";
+  typewriterEffect(feedbackText, "conversationalFeedbackText", 22);
+
+  // ── 3. Overall Score ────────────────────────────────────────────────────────
   const score = Math.round(evalData.overall_score || 0);
   document.getElementById("overallScoreDisplay").innerText = score;
   const ratingBadge = document.getElementById("scoreRatingBadge");
@@ -446,13 +521,13 @@ function renderEvaluationResults(evalData, aiReply) {
     ratingBadge.innerText = "⚠️ Needs Elaboration";
   }
 
-  // WPM & Fillers & STAR
+  // ── 4. WPM & Fillers & STAR ─────────────────────────────────────────────────
   const fluency = evalData.fluency || {};
   document.getElementById("evalWPMDisplay").innerText = `${fluency.estimated_wpm || 135} WPM`;
   document.getElementById("evalFillerDisplay").innerText = fluency.filler_count || 0;
   document.getElementById("evalSTARDisplay").innerText = `${Math.round(evalData.star?.star_score || 0)}%`;
 
-  // Render STAR Sentences
+  // ── 5. Render STAR Sentences ─────────────────────────────────────────────────
   const starContainer = document.getElementById("starSentencesContainer");
   starContainer.innerHTML = "";
   const tagged = evalData.star?.tagged_sentences || [];
@@ -462,19 +537,17 @@ function renderEvaluationResults(evalData, aiReply) {
     tagged.forEach(item => {
       const p = document.createElement("p");
       p.className = "leading-relaxed";
-      
       let badgeClass = "badge-general";
       if (item.tag === "Situation") badgeClass = "badge-situation";
       else if (item.tag === "Task") badgeClass = "badge-task";
       else if (item.tag === "Action") badgeClass = "badge-action";
       else if (item.tag === "Result") badgeClass = "badge-result";
-
       p.innerHTML = `<span class="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mr-1.5 uppercase ${badgeClass}">${item.tag}</span> <span class="text-slate-200">${item.sentence}</span>`;
       starContainer.appendChild(p);
     });
   }
 
-  // Interviewer Response
+  // ── 6. Interviewer Response ──────────────────────────────────────────────────
   document.getElementById("interviewerAckText").innerText = `"${aiReply.acknowledgment || 'Good points discussed.'}"`;
   document.getElementById("interviewerFollowUpText").innerText = `"${aiReply.follow_up_question || 'How would you scale this in production?'}"`;
   document.getElementById("modelExemplarText").innerText = aiReply.model_exemplar_answer || "A senior answer clearly frames the background, action steps, and quantitative outcome.";
@@ -940,4 +1013,320 @@ async function runLabAnalysis() {
   } catch (e) {
     console.error("Lab analysis error:", e);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ★ FEATURE 1: AI Answer Validation — Typewriter / Running Subtitle Effect
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Animates text into element character-by-character, like a running subtitle.
+ * @param {string} text - Text to type out
+ * @param {string} elementId - ID of the DOM element to type into
+ * @param {number} speed - Milliseconds per character (default 22ms ≈ smooth subtitle pace)
+ */
+function typewriterEffect(text, elementId, speed = 22) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.innerText = "";
+
+  // Show the "typing" dots indicator
+  const typingDot = document.getElementById("subtitleTypingDot");
+  if (typingDot) typingDot.classList.remove("hidden");
+
+  let i = 0;
+  function tick() {
+    if (i < text.length) {
+      el.innerText += text[i++];
+      setTimeout(tick, speed);
+    } else {
+      // Done — hide typing indicator
+      if (typingDot) typingDot.classList.add("hidden");
+    }
+  }
+  tick();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ★ FEATURE 2: AI Connectivity Status — Live Badge & Detail Panel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Calls the backend /api/ai/connectivity endpoint and updates the header badge
+ * and the detail panel with live values.
+ */
+async function checkAIConnectivity() {
+  // Show "checking" state
+  const dot = document.getElementById("connStatusDot");
+  const label = document.getElementById("connStatusLabel");
+  if (dot) dot.className = "w-2 h-2 rounded-full bg-slate-500 animate-pulse transition-colors";
+  if (label) label.innerText = "Checking AI...";
+  const recheckSpinner = document.getElementById("recheckSpinner");
+  if (recheckSpinner) recheckSpinner.classList.remove("hidden");
+
+  try {
+    const res = await fetch("/api/ai/connectivity");
+    const data = await res.json();
+
+    const online = data.online === true;
+    const fallback = data.fallback_ready === true;
+    const latency = data.latency_ms ? `${Math.round(data.latency_ms)}ms` : "—";
+
+    // Update badge dot colour
+    const dotColor = online ? "bg-emerald-400" : (fallback ? "bg-amber-400" : "bg-rose-400");
+    const dotPulse = online ? "animate-pulse" : "";
+    if (dot) dot.className = `w-2 h-2 rounded-full ${dotColor} ${dotPulse} transition-colors`;
+
+    // Update badge label
+    const labelText = online
+      ? `${data.provider || "Pollinations"} · ${latency}`
+      : (fallback ? "Fallback (Offline Mode)" : "AI Offline");
+    if (label) {
+      label.innerText = labelText;
+      label.className = online ? "text-emerald-300 transition-colors" : (fallback ? "text-amber-300 transition-colors" : "text-rose-300 transition-colors");
+    }
+
+    // Update latency badge
+    const latencyBadge = document.getElementById("connLatencyBadge");
+    if (latencyBadge && online) {
+      latencyBadge.classList.remove("hidden");
+      latencyBadge.innerText = latency;
+    }
+
+    // Update detail panel
+    const panelDot = document.getElementById("connPanelDot");
+    if (panelDot) panelDot.className = `w-2.5 h-2.5 rounded-full ${dotColor} ${dotPulse}`;
+    const setPanel = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+    setPanel("connProviderLabel",  data.provider  || "—");
+    setPanel("connModelLabel",     data.model     || "—");
+    setPanel("connLatencyLabel",   online ? latency : "—");
+    setPanel("connStatusDetail",   data.status_text || (online ? "Connected" : "Unavailable"));
+    setPanel("connFallbackLabel",  fallback ? "✅ Local fallback ready" : "ℹ️ No local fallback");
+
+  } catch (err) {
+    // Network failure
+    if (dot) dot.className = "w-2 h-2 rounded-full bg-rose-400 transition-colors";
+    if (label) { label.innerText = "AI Unreachable"; label.className = "text-rose-300 transition-colors"; }
+  } finally {
+    if (recheckSpinner) recheckSpinner.classList.add("hidden");
+  }
+}
+
+function toggleConnectivityPanel() {
+  const panel = document.getElementById("connectivityPanel");
+  if (!panel) return;
+  panel.classList.toggle("hidden");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ★ FEATURE 3: Custom Interviewer — Create / AI-Generate / Delete
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function openCreatePersonaModal() {
+  // Clear all form fields
+  ["newPersonaName","newPersonaRole","newPersonaTone","newPersonaDesc","newPersonaFocus","personaGenPrompt"]
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  const avatar = document.getElementById("newPersonaAvatar");
+  if (avatar) avatar.value = "🧑‍🏫";
+  const status = document.getElementById("aiGenStatus");
+  if (status) { status.innerText = ""; status.classList.add("hidden"); }
+  document.getElementById("createPersonaModal").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeCreatePersonaModal() {
+  document.getElementById("createPersonaModal").classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+function onModalBackdropClick(e) {
+  if (e.target === document.getElementById("createPersonaModal")) {
+    closeCreatePersonaModal();
+  }
+}
+
+/**
+ * Calls /api/personas/ai-generate with the user's prompt.
+ * On success, fills in all the form fields automatically.
+ */
+async function aiGeneratePersona() {
+  const prompt = document.getElementById("personaGenPrompt").value.trim();
+  if (!prompt) {
+    showToast("⚠️ Please enter a description for the AI to generate from.", "amber");
+    return;
+  }
+
+  const btn = document.getElementById("aiGenBtn");
+  const spinner = document.getElementById("aiGenSpinner");
+  const btnText = document.getElementById("aiGenBtnText");
+  const status = document.getElementById("aiGenStatus");
+
+  btn.disabled = true;
+  spinner.classList.remove("hidden");
+  btnText.innerText = "Generating...";
+  status.innerText = "🤖 AI is designing your interviewer...";
+  status.classList.remove("hidden");
+
+  try {
+    const res = await fetch("/api/personas/ai-generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+
+    // Fill in form fields from AI response
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set("newPersonaName",   data.name);
+    set("newPersonaRole",   data.role);
+    set("newPersonaAvatar", data.avatar);
+    set("newPersonaTone",   data.tone);
+    set("newPersonaDesc",   data.description);
+    set("newPersonaFocus",  data.special_focus);
+
+    // Set domain dropdown if matching
+    if (data.domain) {
+      const domSel = document.getElementById("newPersonaDomain");
+      const opts = Array.from(domSel.options);
+      const match = opts.find(o => o.value.toLowerCase().includes(data.domain.toLowerCase().split(" ")[0]));
+      if (match) domSel.value = match.value;
+    }
+
+    status.innerText = "✅ AI-generated persona filled in! Review and save.";
+    status.className = "text-[11px] text-emerald-400";
+
+  } catch (err) {
+    console.error("AI generate persona error:", err);
+    status.innerText = `❌ Generation failed: ${err.message || "Network error"}. Try again or fill manually.`;
+    status.className = "text-[11px] text-rose-400";
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add("hidden");
+    btnText.innerText = "Generate";
+  }
+}
+
+/**
+ * Reads the create-persona form, POSTs to /api/personas/create, and reloads personas.
+ */
+async function saveCustomPersona() {
+  const name    = document.getElementById("newPersonaName").value.trim();
+  const role    = document.getElementById("newPersonaRole").value.trim();
+  const avatar  = document.getElementById("newPersonaAvatar").value.trim() || "🧑‍🏫";
+  const tone    = document.getElementById("newPersonaTone").value.trim() || "Professional & Analytical";
+  const desc    = document.getElementById("newPersonaDesc").value.trim() || "Custom AI interviewer.";
+  const domain  = document.getElementById("newPersonaDomain").value;
+  const focus   = document.getElementById("newPersonaFocus").value.trim();
+
+  if (!name || !role) {
+    showToast("⚠️ Interviewer Name and Role are required.", "amber");
+    return;
+  }
+
+  const saveBtn = document.getElementById("savePersonaBtn");
+  const spinner = document.getElementById("savePersonaSpinner");
+  saveBtn.disabled = true;
+  spinner.classList.remove("hidden");
+
+  try {
+    const payload = { name, role, avatar, tone, description: desc, domain, special_focus: focus };
+    const res = await fetch("/api/personas/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.detail || "Failed to save.");
+
+    closeCreatePersonaModal();
+    await loadPersonas();
+
+    // Auto-select the newly created persona in the dropdown
+    const newKey = `${name} (Custom)`;
+    const select = document.getElementById("personaSelect");
+    const opt = Array.from(select.options).find(o => o.value === newKey || o.value.startsWith(name));
+    if (opt) { select.value = opt.value; state.currentPersonaKey = opt.value; updatePersonaDisplay(); }
+
+    showToast(`✅ "${name}" has been created and selected!`, "emerald");
+
+  } catch (err) {
+    console.error("Save persona error:", err);
+    showToast(`❌ Save failed: ${err.message}`, "rose");
+  } finally {
+    saveBtn.disabled = false;
+    spinner.classList.add("hidden");
+  }
+}
+
+/**
+ * Sends DELETE to /api/personas/{name}. On success reloads the persona list.
+ */
+async function deletePersona(personaKey) {
+  if (!confirm(`Delete the custom interviewer "${personaKey.split(" (")[0]}"? This cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/api/personas/${encodeURIComponent(personaKey)}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Could not delete.");
+
+    // If deleted persona was active, reset to first built-in
+    if (state.currentPersonaKey === personaKey) {
+      const firstBuiltIn = Object.keys(state.personas).find(k => state.personas[k].built_in !== false);
+      state.currentPersonaKey = firstBuiltIn || Object.keys(state.personas)[0];
+    }
+    await loadPersonas();
+    // Re-sync select to current persona
+    const select = document.getElementById("personaSelect");
+    if (select) select.value = state.currentPersonaKey;
+    updatePersonaDisplay();
+    showToast(`🗑️ Interviewer deleted successfully.`, "slate");
+
+  } catch (err) {
+    console.error("Delete persona error:", err);
+    showToast(`❌ Delete failed: ${err.message}`, "rose");
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ★ UTILITY: Toast Notifications
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Shows a dismissible toast at bottom-right corner.
+ * @param {string} message - HTML-safe text
+ * @param {string} color   - "emerald" | "amber" | "rose" | "slate" | "purple"
+ */
+function showToast(message, color = "purple") {
+  const container = document.getElementById("toastContainer");
+  if (!container) return;
+
+  const colorMap = {
+    emerald: "bg-emerald-950/90 border-emerald-500/40 text-emerald-300",
+    amber:   "bg-amber-950/90  border-amber-500/40  text-amber-300",
+    rose:    "bg-rose-950/90   border-rose-500/40   text-rose-300",
+    slate:   "bg-slate-900/90  border-slate-500/40  text-slate-300",
+    purple:  "bg-purple-950/90 border-purple-500/40 text-purple-300",
+  };
+
+  const toast = document.createElement("div");
+  toast.className = `pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-semibold shadow-xl
+    transition-all opacity-0 translate-y-2 ${colorMap[color] || colorMap.purple}`;
+  toast.innerText = message;
+  container.appendChild(toast);
+
+  // Animate in
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+    toast.style.transition = "all 0.3s ease";
+  });
+
+  // Auto-dismiss after 4s
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(4px)";
+    setTimeout(() => toast.remove(), 350);
+  }, 4000);
 }

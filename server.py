@@ -24,6 +24,11 @@ from core.conversation_agent import ConversationAgent
 from core.voice_engine import VoiceEngine
 from core.resume_parser import ResumeParser
 from core.report_generator import ReportGenerator
+from core.persona_manager import (
+    get_all_personas,
+    save_custom_persona,
+    delete_custom_persona
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -78,6 +83,18 @@ class ReportRequest(BaseModel):
     session_results: List[Dict[str, Any]]
     overall_summary: Dict[str, Any]
 
+class CreatePersonaRequest(BaseModel):
+    name: str
+    role: str
+    description: str
+    tone: str
+    avatar: str = "🧑‍🏫"
+    default_domain: str = "Software Engineering"
+    special_focus: str = ""
+
+class GeneratePersonaPromptRequest(BaseModel):
+    prompt: str
+
 
 # --- API Routes ---
 
@@ -91,9 +108,39 @@ def health_check():
         "ai_autofetch_active": True
     }
 
+@app.get("/api/ai/connectivity")
+def check_ai_connectivity():
+    """Returns live ping status and latency for active AI connectivity."""
+    return ConversationAgent.test_connectivity()
+
 @app.get("/api/personas")
 def get_personas():
-    return config.PERSONAS
+    """Returns all available built-in and user-created custom personas."""
+    return get_all_personas()
+
+@app.post("/api/personas/create")
+def create_persona(req: CreatePersonaRequest):
+    """Persists a new custom interviewer persona to disk."""
+    if not req.name.strip():
+        raise HTTPException(status_code=400, detail="Persona name is required.")
+    data = save_custom_persona(req.name.strip(), req.model_dump())
+    return {"success": True, "name": req.name.strip(), "persona": data}
+
+@app.delete("/api/personas/{persona_name}")
+def remove_persona(persona_name: str):
+    """Deletes a custom interviewer persona. Built-in personas are protected."""
+    success = delete_custom_persona(persona_name)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot delete built-in persona or persona not found.")
+    return {"success": True, "deleted": persona_name}
+
+@app.post("/api/personas/ai-generate")
+def generate_persona(req: GeneratePersonaPromptRequest):
+    """Uses AI to generate a complete custom interviewer persona from a prompt."""
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required.")
+    generated = ConversationAgent.ai_generate_persona(req.prompt.strip())
+    return generated
 
 @app.get("/api/questions")
 def get_questions(
@@ -147,8 +194,8 @@ def evaluate_answer(req: EvaluateRequest):
 @app.post("/api/chat")
 def chat_with_interviewer(req: ChatRequest):
     """
-    Generates conversational interviewer response, follow-up, and model exemplar answer.
-    Automatically fetches free public LLMs - zero API key required.
+    Validates candidate response and generates conversational interviewer feedback.
+    Real AI validation for correct, partially correct, wrong, or creative answers.
     """
     agent = ConversationAgent(persona_name=req.persona_name)
     response_data = agent.generate_response(
@@ -156,10 +203,7 @@ def chat_with_interviewer(req: ChatRequest):
         current_question=req.current_question,
         nlp_evaluation=req.nlp_evaluation
     )
-    return {
-        **response_data,
-        "provider_used": agent.last_provider_used
-    }
+    return response_data
 
 @app.post("/api/tts")
 def text_to_speech(req: TTSRequest):
