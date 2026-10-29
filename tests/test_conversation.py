@@ -29,8 +29,11 @@ def test_conversation_agent_offline():
         "keywords": {"missing": []}
     }
     reply = agent.generate_response("I used Redis Redlock with atomic Lua scripts to prevent concurrent updates.", current_q, nlp_eval)
-    assert len(reply) > 20
-    assert isinstance(reply, str)
+    assert isinstance(reply, dict)
+    assert "acknowledgment" in reply
+    assert "follow_up_question" in reply
+    assert "model_exemplar_answer" in reply
+    assert len(reply["acknowledgment"]) > 10
 
 
 def test_resume_parser_skills():

@@ -189,5 +189,13 @@ class NLPAnalyzer:
             "keywords": keyword_analysis,
             "semantic_score": semantic_score,
             "tone": tone,
+            "linguistics": {
+                "flesch_reading_ease": fluency.get("flesch_reading_ease", 0.0),
+                "gunning_fog_index": fluency.get("gunning_fog_index", 0.0),
+                "lexical_diversity_ttr": fluency.get("lexical_diversity", 0.0),
+                "hapax_legomena_ratio": fluency.get("hapax_legomena_ratio", 0.0),
+                "avg_sentence_length": fluency.get("avg_sentence_length", 0.0),
+                "filler_ratio": fluency.get("filler_percentage", 0.0)
+            },
             "coaching_summary": list(dict.fromkeys(coaching_summary))[:5]  # deduplicated top 5
         }

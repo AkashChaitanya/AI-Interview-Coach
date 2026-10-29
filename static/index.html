@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Interview Coach | Computational Linguistics & Voice Platform</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN with Custom Dark Configuration -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              dark: '#07090E',
+              card: '#0E131F',
+              cardHover: '#151C2D',
+              border: 'rgba(255, 255, 255, 0.08)',
+              violet: '#8B5CF6',
+              cyan: '#06B6D4',
+              emerald: '#10B981',
+              amber: '#F59E0B',
+              rose: '#F43F5E'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js for Interactive Radar and Bar Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Custom Styling -->
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="bg-[#07090E] text-slate-100 min-h-screen flex flex-col antialiased selection:bg-purple-600 selection:text-white">
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-50 bg-[#07090E]/80 backdrop-blur-xl border-b border-white/10 px-4 lg:px-8 py-3.5 transition-all">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      
+      <!-- Brand & Status -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-cyan-500 p-[1px] flex items-center justify-center shadow-lg shadow-purple-500/20">
+          <div class="w-full h-full bg-[#0E131F] rounded-[11px] flex items-center justify-center">
+            <i data-lucide="mic" class="w-5 h-5 text-purple-400"></i>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold text-lg tracking-tight text-white">AI Interview Coach</span>
+            <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">v2.0 Pro</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-slate-400">
+            <span>Computational Linguistics & Speech Platform</span>
+            <span class="inline-flex items-center gap-1 text-[11px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Auto-AI Active (Zero Keys Needed)
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="hidden md:flex items-center gap-1.5 bg-[#0E131F]/90 p-1.5 rounded-xl border border-white/10 shadow-inner">
+        <button onclick="switchTab('studio')" id="tab-btn-studio" class="nav-tab-btn nav-pill-active flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all">
+          <i data-lucide="radio" class="w-4 h-4 text-purple-400"></i>
+          <span>Live Studio</span>
+        </button>
+        <button onclick="switchTab('resume')" id="tab-btn-resume" class="nav-tab-btn text-slate-400 hover:text-white hover:bg-white/5 flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all">
+          <i data-lucide="file-text" class="w-4 h-4"></i>
+          <span>Resume Tailoring</span>
+        </button>
+        <button onclick="switchTab('analytics')" id="tab-btn-analytics" class="nav-tab-btn text-slate-400 hover:text-white hover:bg-white/5 flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>Linguistics Analytics</span>
+        </button>
+        <button onclick="switchTab('bank')" id="tab-btn-bank" class="nav-tab-btn text-slate-400 hover:text-white hover:bg-white/5 flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span>Question Bank (220+)</span>
+        </button>
+        <button onclick="switchTab('lab')" id="tab-btn-lab" class="nav-tab-btn text-slate-400 hover:text-white hover:bg-white/5 flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all">
+          <i data-lucide="flask-conical" class="w-4 h-4"></i>
+          <span>NLP Lab</span>
+        </button>
+      </nav>
+
+      <!-- Right Action Badges -->
+      <div class="flex items-center gap-3">
+        <div id="aiEngineBadge" class="hidden sm:flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 font-mono">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-cyan-400"></i>
+          <span id="currentEngineLabel">Pollinations AI / Llama 3</span>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Mobile Tab Bar -->
+  <div class="md:hidden flex overflow-x-auto gap-2 bg-[#0E131F] p-2 border-b border-white/10 text-xs">
+    <button onclick="switchTab('studio')" class="px-3 py-1.5 rounded-lg bg-purple-600/20 text-purple-300 font-semibold flex items-center gap-1 shrink-0">
+      <i data-lucide="radio" class="w-3.5 h-3.5"></i> Studio
+    </button>
+    <button onclick="switchTab('resume')" class="px-3 py-1.5 rounded-lg text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+      <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Resume
+    </button>
+    <button onclick="switchTab('analytics')" class="px-3 py-1.5 rounded-lg text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+      <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> Analytics
+    </button>
+    <button onclick="switchTab('bank')" class="px-3 py-1.5 rounded-lg text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+      <i data-lucide="layers" class="w-3.5 h-3.5"></i> Questions
+    </button>
+    <button onclick="switchTab('lab')" class="px-3 py-1.5 rounded-lg text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+      <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i> NLP Lab
+    </button>
+  </div>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-6">
+
+    <!-- ========================================================
+         WORKSPACE 1: LIVE VOICE INTERVIEW STUDIO
+         ======================================================== -->
+    <section id="workspace-studio" class="space-y-6">
+      
+      <!-- Studio Grid: Left Sidebar Controls & Right Interview Canvas -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Controls Column (4 cols) -->
+        <div class="lg:col-span-4 space-y-5">
+          
+          <!-- Interviewer Persona Card -->
+          <div class="glass-panel p-5 border border-white/10 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Interviewer Persona</span>
+              <span id="personaToneBadge" class="text-[11px] font-medium text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">Academic & Rigorous</span>
+            </div>
+
+            <div class="flex items-center gap-4 mb-4">
+              <div id="personaAvatar" class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/20 to-cyan-500/20 border border-purple-500/30 flex items-center justify-center text-3xl shadow-inner">
+                👩‍🔬
+              </div>
+              <div>
+                <h3 id="personaName" class="font-bold text-white text-base">Dr. Maya</h3>
+                <p id="personaRole" class="text-xs text-purple-300 font-medium">Lead NLP Research Scientist</p>
+                <p id="personaDesc" class="text-[11px] text-slate-400 mt-1 line-clamp-2">Expert in computational linguistics, semantics, tokenization, and transformer architectures.</p>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Switch Interviewer</label>
+              <select id="personaSelect" onchange="onPersonaChange()" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl px-3 py-2.5 focus:outline-none focus:border-purple-500 transition-colors">
+                <!-- Injected via JS -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Session Setup & Filter Card -->
+          <div class="glass-panel p-5 border border-white/10 space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Session Settings</span>
+              <span class="text-xs text-purple-400 font-mono" id="questionCounterBadge">Question 1 of 3</span>
+            </div>
+
+            <div class="space-y-3">
+              <div>
+                <label class="text-xs text-slate-400 block mb-1">Candidate Name</label>
+                <input type="text" id="candidateNameInput" value="Alex Chen" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500">
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Domain</label>
+                  <select id="domainFilterSelect" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl px-2.5 py-2 focus:outline-none focus:border-purple-500">
+                    <option value="All Domains">All Domains</option>
+                    <option value="Computational Linguistics & NLP" selected>NLP & Linguistics</option>
+                    <option value="Software Engineering">Software Eng</option>
+                    <option value="Machine Learning & Data Science">ML & Data Science</option>
+                    <option value="Behavioral & HR">Behavioral (STAR)</option>
+                    <option value="System Design">System Design</option>
+                    <option value="Product & Strategy">Product Sense</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-400 block mb-1">Difficulty</label>
+                  <select id="difficultyFilterSelect" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl px-2.5 py-2 focus:outline-none focus:border-purple-500">
+                    <option value="All Levels">All Levels</option>
+                    <option value="Junior">Junior</option>
+                    <option value="Mid" selected>Mid-Level</option>
+                    <option value="Senior">Senior / Lead</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-xs text-slate-400 block mb-1">Questions in Session: <span id="sessionLengthDisplay" class="text-purple-400 font-bold">3</span></label>
+                <input type="range" id="sessionLengthSlider" min="2" max="6" value="3" oninput="document.getElementById('sessionLengthDisplay').innerText = this.value" class="w-full accent-purple-500">
+              </div>
+
+              <button onclick="startNewSession()" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs py-2.5 px-4 rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center justify-center gap-2">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Start New Mock Interview</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Session Progress Overview -->
+          <div class="glass-panel p-4 border border-white/10 text-xs text-slate-400 space-y-2">
+            <div class="flex items-center justify-between text-[11px] uppercase font-semibold">
+              <span>Session Score History</span>
+              <span id="sessionAvgScoreLabel" class="text-emerald-400 font-mono font-bold">Avg: -- / 100</span>
+            </div>
+            <div id="sessionHistoryList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+              <div class="text-slate-500 italic text-[11px]">No questions answered in this session yet.</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Main Stage Column (8 cols) -->
+        <div class="lg:col-span-8 space-y-5">
+          
+          <!-- Question Display Banner -->
+          <div class="glass-panel p-6 border border-white/10 relative overflow-hidden">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span id="currentQCategoryBadge" class="text-[11px] font-semibold text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20">Computational Linguistics & NLP</span>
+                <span id="currentQDifficultyBadge" class="text-[11px] font-semibold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20">Mid</span>
+              </div>
+              <button onclick="readQuestionAloud()" class="flex items-center gap-1.5 text-xs text-purple-300 hover:text-white bg-purple-500/10 hover:bg-purple-500/20 px-3 py-1.5 rounded-lg border border-purple-500/30 transition-all">
+                <i data-lucide="volume-2" class="w-4 h-4 text-purple-400"></i>
+                <span>Listen Aloud</span>
+              </button>
+            </div>
+
+            <h2 id="currentQuestionText" class="text-lg lg:text-xl font-bold text-white leading-relaxed tracking-tight">
+              Loading curated interview question...
+            </h2>
+
+            <div class="mt-4 pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+              <span class="text-slate-500 text-[11px] uppercase font-semibold">Target Concepts:</span>
+              <div id="currentQKeywords" class="flex flex-wrap gap-1.5">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Voice & Audio Recording Stage -->
+          <div class="glass-panel p-6 border border-white/10 space-y-4">
+            
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-purple-500"></div>
+                <h4 class="font-bold text-sm text-white">Live Voice Agent Studio</h4>
+                <span class="text-xs text-slate-400">(Real-Time Speech-to-Text & Waveform)</span>
+              </div>
+
+              <!-- Recording Status Indicator -->
+              <div id="micStatusContainer" class="flex items-center gap-2 text-xs font-mono px-3 py-1 rounded-full bg-white/5 border border-white/10">
+                <span id="micStatusDot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+                <span id="micStatusText" class="text-slate-400">Mic Ready</span>
+                <span id="recordingTimer" class="hidden text-rose-400 font-bold ml-1">00:00</span>
+              </div>
+            </div>
+
+            <!-- Waveform Canvas -->
+            <canvas id="waveformCanvas" width="700" height="64"></canvas>
+
+            <!-- Voice Controls & Quick Actions -->
+            <div class="flex flex-wrap items-center gap-3">
+              <button id="toggleRecordBtn" onclick="toggleSpeechRecording()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-600/20 transition-all">
+                <i data-lucide="mic" class="w-4 h-4"></i>
+                <span id="recordBtnLabel">Start Speaking</span>
+              </button>
+
+              <button onclick="clearTranscript()" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-slate-300 text-xs px-3.5 py-2.5 rounded-xl border border-white/10 transition-all">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>Clear</span>
+              </button>
+
+              <div class="ml-auto flex items-center gap-3 text-xs font-mono text-slate-400">
+                <span>Words: <strong id="wordCountLive" class="text-purple-400">0</strong></span>
+                <span>WPM: <strong id="wpmEstimateLive" class="text-cyan-400">0</strong></span>
+              </div>
+            </div>
+
+            <!-- Editable Transcript Text Area -->
+            <div>
+              <textarea id="answerTranscriptInput" rows="5" placeholder="Speak through your microphone above, or type your interview response here in full detail..." class="w-full bg-[#0E131F]/90 text-sm text-slate-100 placeholder-slate-500 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-purple-500 transition-colors leading-relaxed resize-y"></textarea>
+            </div>
+
+            <!-- Submit and Navigation Buttons -->
+            <div class="flex items-center justify-between pt-2">
+              <button onclick="skipQuestion()" class="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
+                <i data-lucide="skip-forward" class="w-3.5 h-3.5"></i>
+                <span>Skip Question</span>
+              </button>
+
+              <button id="submitAnswerBtn" onclick="submitAnswerForEvaluation()" class="bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:opacity-95 text-white font-bold text-xs px-6 py-3 rounded-xl shadow-xl shadow-purple-600/25 flex items-center gap-2 transition-all">
+                <i data-lucide="sparkles" class="w-4 h-4 text-cyan-300"></i>
+                <span>Submit Answer & Receive AI Coaching</span>
+              </button>
+            </div>
+
+          </div>
+
+          <!-- Real-Time Evaluation & Coaching Results (Dynamic) -->
+          <div id="evaluationResultsPanel" class="hidden glass-panel p-6 border border-purple-500/30 space-y-5 transition-all">
+            
+            <!-- Score Header & Radial Metrics -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-white/10 gap-4">
+              <div>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Overall Answer Score</span>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <span id="overallScoreDisplay" class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 font-mono">--</span>
+                  <span class="text-slate-400 text-xs">/ 100</span>
+                  <span id="scoreRatingBadge" class="ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Strong Answer</span>
+                </div>
+              </div>
+
+              <!-- Metric Badges Row -->
+              <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                <div class="bg-white/5 p-2 rounded-xl border border-white/5">
+                  <span class="text-[10px] text-slate-400 uppercase block">Speaking Rate</span>
+                  <strong id="evalWPMDisplay" class="font-mono text-cyan-400 text-sm">-- WPM</strong>
+                </div>
+                <div class="bg-white/5 p-2 rounded-xl border border-white/5">
+                  <span class="text-[10px] text-slate-400 uppercase block">Filler Words</span>
+                  <strong id="evalFillerDisplay" class="font-mono text-amber-400 text-sm">0</strong>
+                </div>
+                <div class="bg-white/5 p-2 rounded-xl border border-white/5">
+                  <span class="text-[10px] text-slate-400 uppercase block">STAR Score</span>
+                  <strong id="evalSTARDisplay" class="font-mono text-purple-400 text-sm">--%</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- STAR Sentence-by-Sentence Breakdown -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <h5 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <i data-lucide="tags" class="w-3.5 h-3.5 text-purple-400"></i>
+                  <span>STAR Sentence Deconstruction (Trained ML Classifier)</span>
+                </h5>
+                <div class="flex items-center gap-1.5 text-[10px]">
+                  <span class="badge-situation px-1.5 py-0.5 rounded">S = Situation</span>
+                  <span class="badge-task px-1.5 py-0.5 rounded">T = Task</span>
+                  <span class="badge-action px-1.5 py-0.5 rounded">A = Action</span>
+                  <span class="badge-result px-1.5 py-0.5 rounded">R = Result</span>
+                </div>
+              </div>
+
+              <div id="starSentencesContainer" class="p-3.5 bg-[#0E131F] rounded-xl border border-white/10 space-y-2 text-xs leading-relaxed max-h-48 overflow-y-auto">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+            <!-- Interviewer Conversational Follow-up Box -->
+            <div class="p-4 rounded-xl bg-gradient-to-r from-purple-950/40 via-indigo-950/30 to-slate-900 border border-purple-500/25 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span id="interviewerReplyAvatar" class="text-xl">👩‍🔬</span>
+                  <h5 class="font-bold text-sm text-purple-300">Interviewer Follow-up & Deep Dive</h5>
+                </div>
+                <button onclick="playInterviewerVoice()" class="flex items-center gap-1.5 text-xs text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1 rounded-lg border border-cyan-500/30 transition-all">
+                  <i data-lucide="play" class="w-3 h-3 text-cyan-400"></i>
+                  <span>Play Voice</span>
+                </button>
+              </div>
+
+              <p id="interviewerAckText" class="text-xs text-slate-200 leading-relaxed italic">
+                "Listening to candidate response..."
+              </p>
+
+              <div class="p-3 rounded-lg bg-black/30 border border-purple-500/20">
+                <span class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wide block mb-1">Follow-up Drill-Down Question:</span>
+                <p id="interviewerFollowUpText" class="text-xs text-slate-100 font-medium">
+                  "..."
+                </p>
+              </div>
+            </div>
+
+            <!-- Model Exemplar Answer Box -->
+            <div class="p-4 rounded-xl bg-[#0E131F] border border-white/10 space-y-2">
+              <div class="flex items-center gap-2">
+                <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
+                <h5 class="font-bold text-xs text-amber-400 uppercase tracking-wider">Model Exemplar Answer (Gold Standard Formulation)</h5>
+              </div>
+              <p id="modelExemplarText" class="text-xs text-slate-300 leading-relaxed">
+                Loading exemplar response...
+              </p>
+            </div>
+
+            <!-- Next Question Button -->
+            <div class="flex justify-end pt-2">
+              <button onclick="nextQuestion()" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all">
+                <span>Proceed to Next Question</span>
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================
+         WORKSPACE 2: RESUME & JOB DESCRIPTION TAILORING
+         ======================================================== -->
+    <section id="workspace-resume" class="hidden space-y-6">
+      
+      <div class="glass-panel p-6 border border-white/10">
+        <div class="max-w-3xl">
+          <h2 class="text-xl font-bold text-white tracking-tight">📄 Resume & Target Role Tailoring</h2>
+          <p class="text-xs text-slate-400 mt-1">Upload your resume or load a high-profile sample to automatically extract technical competencies and synthesize custom deep-dive interview questions.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Input Form (6 cols) -->
+        <div class="lg:col-span-6 space-y-5">
+          <div class="glass-panel p-5 border border-white/10 space-y-4">
+            
+            <div>
+              <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-2">1. Upload Resume (PDF or TXT)</label>
+              <div id="dropZone" class="border-2 border-dashed border-white/15 hover:border-purple-500/50 rounded-xl p-6 text-center cursor-pointer transition-colors bg-[#0E131F]/50">
+                <i data-lucide="upload-cloud" class="w-8 h-8 text-purple-400 mx-auto mb-2"></i>
+                <p class="text-xs text-slate-300 font-medium">Click to browse or drag and drop your resume file</p>
+                <p class="text-[11px] text-slate-500 mt-1">Supports PDF or plain TXT files</p>
+                <input type="file" id="resumeFileInput" accept=".pdf,.txt" class="hidden" onchange="onFileSelected(this)">
+                <div id="selectedFileName" class="hidden mt-2 text-xs text-emerald-400 font-mono font-semibold"></div>
+              </div>
+            </div>
+
+            <!-- Quick Load Samples -->
+            <div>
+              <span class="text-xs text-slate-400 block mb-1.5">Or load a pre-built sample resume:</span>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="loadSampleResume('nlp')" class="text-xs text-left bg-white/5 hover:bg-white/10 p-2.5 rounded-xl border border-white/10 transition-all">
+                  <strong class="text-purple-300 block">Priya Sharma</strong>
+                  <span class="text-[10px] text-slate-400">Computational Linguist & NLP</span>
+                </button>
+                <button onclick="loadSampleResume('swe')" class="text-xs text-left bg-white/5 hover:bg-white/10 p-2.5 rounded-xl border border-white/10 transition-all">
+                  <strong class="text-cyan-300 block">Alex Chen</strong>
+                  <span class="text-[10px] text-slate-400">Distributed Systems & SWE</span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-1">2. Target Job Description (Optional)</label>
+              <textarea id="jdInput" rows="4" placeholder="Paste target job specifications here (e.g., 'Looking for a Senior NLP Engineer proficient in Transformers, vLLM, and cross-lingual models...')" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl p-3 focus:outline-none focus:border-purple-500"></textarea>
+            </div>
+
+            <button onclick="parseAndGenerateTailoredQuestions()" class="w-full bg-gradient-to-r from-purple-600 to-cyan-600 hover:opacity-95 text-white font-bold text-xs py-3 px-4 rounded-xl shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2 transition-all">
+              <i data-lucide="zap" class="w-4 h-4 text-cyan-300"></i>
+              <span>Parse Resume & Generate Tailored Questions</span>
+            </button>
+
+          </div>
+        </div>
+
+        <!-- Right Column: Extracted Skills & Custom Questions (6 cols) -->
+        <div class="lg:col-span-6 space-y-5">
+          
+          <!-- Extracted Skills Overview -->
+          <div class="glass-panel p-5 border border-white/10 space-y-3">
+            <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>Extracted Competencies & Skills</span>
+            </h4>
+            <div id="extractedSkillsContainer" class="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+              <div class="text-slate-500 italic text-xs">No resume parsed yet. Upload or load a sample on the left.</div>
+            </div>
+          </div>
+
+          <!-- Generated Tailored Questions List -->
+          <div class="glass-panel p-5 border border-white/10 space-y-4">
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <i data-lucide="target" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>Synthesized Tailored Questions</span>
+              </h4>
+              <button id="loadTailoredToStudioBtn" onclick="loadTailoredQuestionsIntoStudio()" class="hidden text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/40 px-3 py-1 rounded-lg transition-all flex items-center gap-1">
+                <i data-lucide="play" class="w-3 h-3"></i>
+                <span>Practice in Studio</span>
+              </button>
+            </div>
+
+            <div id="tailoredQuestionsContainer" class="space-y-3 max-h-72 overflow-y-auto pr-1">
+              <div class="text-slate-500 italic text-xs">Generated questions matching your background will appear here.</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================
+         WORKSPACE 3: LINGUISTICS ANALYTICS DASHBOARD
+         ======================================================== -->
+    <section id="workspace-analytics" class="hidden space-y-6">
+      
+      <!-- Analytics Header Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel p-4 border border-white/10 text-center">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Average Overall Score</span>
+          <div id="analyticsAvgScore" class="text-2xl font-bold font-mono text-emerald-400 mt-1">--</div>
+        </div>
+        <div class="glass-panel p-4 border border-white/10 text-center">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Avg STAR Adherence</span>
+          <div id="analyticsAvgSTAR" class="text-2xl font-bold font-mono text-purple-400 mt-1">--%</div>
+        </div>
+        <div class="glass-panel p-4 border border-white/10 text-center">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Avg Speech Pace</span>
+          <div id="analyticsAvgWPM" class="text-2xl font-bold font-mono text-cyan-400 mt-1">-- WPM</div>
+        </div>
+        <div class="glass-panel p-4 border border-white/10 text-center">
+          <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Total Verbal Fillers</span>
+          <div id="analyticsTotalFillers" class="text-2xl font-bold font-mono text-amber-400 mt-1">0</div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Radar Chart (6 cols) -->
+        <div class="lg:col-span-6 glass-panel p-5 border border-white/10 flex flex-col">
+          <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <i data-lucide="compass" class="w-4 h-4 text-purple-400"></i>
+            <span>5-Axis Competency Radar Profile</span>
+          </h4>
+          <div class="flex-1 min-h-[300px] flex items-center justify-center">
+            <canvas id="competencyRadarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Filler Word Distribution Bar Chart (6 cols) -->
+        <div class="lg:col-span-6 glass-panel p-5 border border-white/10 flex flex-col">
+          <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <i data-lucide="mic-off" class="w-4 h-4 text-rose-400"></i>
+            <span>Verbal Filler Word Distribution</span>
+          </h4>
+          <div class="flex-1 min-h-[300px] flex items-center justify-center">
+            <canvas id="fillerBarChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Download Reports Bar -->
+      <div class="glass-panel p-5 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div>
+          <h4 class="font-bold text-white text-sm">Download Official Assessment Report</h4>
+          <p class="text-xs text-slate-400">Export complete linguistic breakdowns, STAR scores, and personalized coaching recommendations.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="downloadReport('markdown')" class="bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all">
+            <i data-lucide="file-down" class="w-4 h-4 text-purple-400"></i>
+            <span>Export Markdown (.md)</span>
+          </button>
+          <button onclick="downloadReport('json')" class="bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all">
+            <i data-lucide="code" class="w-4 h-4 text-cyan-400"></i>
+            <span>Export JSON Analytics</span>
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================
+         WORKSPACE 4: CURATED QUESTION BANK (220+ QUESTIONS)
+         ======================================================== -->
+    <section id="workspace-bank" class="hidden space-y-6">
+      
+      <div class="glass-panel p-6 border border-white/10">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-white tracking-tight">📚 Curated Open-Source Question Bank</h2>
+            <p class="text-xs text-slate-400 mt-1">Explore 221+ industry-grade technical and behavioral interview questions complete with evaluation rubrics.</p>
+          </div>
+          <span id="bankTotalBadge" class="text-xs font-mono font-bold text-purple-400 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20">
+            221 Questions Available
+          </span>
+        </div>
+      </div>
+
+      <!-- Filter and Search Bar -->
+      <div class="glass-panel p-4 border border-white/10 grid grid-cols-1 md:grid-cols-12 gap-3">
+        <div class="md:col-span-4">
+          <input type="text" id="bankSearchInput" oninput="onBankSearch()" placeholder="🔍 Search question or keyword (e.g. transformer, bpe, cache)..." class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl px-3 py-2.5 focus:outline-none focus:border-purple-500">
+        </div>
+        <div class="md:col-span-4">
+          <select id="bankCategorySelect" onchange="onBankSearch()" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl px-3 py-2.5 focus:outline-none focus:border-purple-500">
+            <option value="All">All Categories</option>
+            <option value="Computational Linguistics & NLP">Computational Linguistics & NLP</option>
+            <option value="Software Engineering">Software Engineering</option>
+            <option value="Machine Learning & Data Science">Machine Learning & Data Science</option>
+            <option value="Behavioral & HR">Behavioral & HR</option>
+            <option value="System Design">System Design</option>
+            <option value="Product & Strategy">Product & Strategy</option>
+          </select>
+        </div>
+        <div class="md:col-span-4">
+          <select id="bankDifficultySelect" onchange="onBankSearch()" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl px-3 py-2.5 focus:outline-none focus:border-purple-500">
+            <option value="All">All Difficulties</option>
+            <option value="Junior">Junior</option>
+            <option value="Mid">Mid-Level</option>
+            <option value="Senior">Senior</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Question Cards Grid -->
+      <div id="bankQuestionsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Injected via JS -->
+      </div>
+
+    </section>
+
+    <!-- ========================================================
+         WORKSPACE 5: COMPUTATIONAL LINGUISTICS LAB
+         ======================================================== -->
+    <section id="workspace-lab" class="hidden space-y-6">
+      
+      <div class="glass-panel p-6 border border-white/10">
+        <div class="max-w-3xl">
+          <h2 class="text-xl font-bold text-white tracking-tight">🔬 Computational Linguistics & NLP Lab</h2>
+          <p class="text-xs text-slate-400 mt-1">Interactive sandbox to test real-time sentence-level STAR parsing, syntactic readability metrics (Flesch & Gunning Fog), and lexical diversity.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Input Text Column (6 cols) -->
+        <div class="lg:col-span-6 space-y-4">
+          <div class="glass-panel p-5 border border-white/10 space-y-3">
+            <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Input Transcript or Paragraph</label>
+            <textarea id="labInputText" rows="9" class="w-full bg-[#0E131F] text-xs text-slate-200 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-purple-500 font-mono leading-relaxed" placeholder="Type or paste any interview answer here to deconstruct its computational linguistics..."></textarea>
+            
+            <div class="flex items-center justify-between">
+              <button onclick="loadLabSampleText()" class="text-xs text-purple-400 hover:text-purple-300 font-medium">
+                Load Sample Behavioral Paragraph
+              </button>
+              <button onclick="runLabAnalysis()" class="bg-gradient-to-r from-purple-600 to-cyan-600 hover:opacity-95 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-purple-600/20 flex items-center gap-1.5 transition-all">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                <span>Analyze Linguistics</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Output Linguistics Column (6 cols) -->
+        <div class="lg:col-span-6 space-y-4">
+          <div class="glass-panel p-5 border border-white/10 space-y-4">
+            <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="cpu" class="w-4 h-4 text-cyan-400"></i>
+              <span>Computational Metrics Breakdown</span>
+            </h4>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-center text-xs">
+              <div class="bg-[#0E131F] p-2.5 rounded-xl border border-white/10">
+                <span class="text-[10px] text-slate-400 uppercase block">Flesch Reading Ease</span>
+                <strong id="labFleschDisplay" class="font-mono text-cyan-400 text-sm">--</strong>
+              </div>
+              <div class="bg-[#0E131F] p-2.5 rounded-xl border border-white/10">
+                <span class="text-[10px] text-slate-400 uppercase block">Gunning Fog Index</span>
+                <strong id="labFogDisplay" class="font-mono text-purple-400 text-sm">--</strong>
+              </div>
+              <div class="bg-[#0E131F] p-2.5 rounded-xl border border-white/10">
+                <span class="text-[10px] text-slate-400 uppercase block">Lexical Richness (TTR)</span>
+                <strong id="labTTRDisplay" class="font-mono text-emerald-400 text-sm">--</strong>
+              </div>
+              <div class="bg-[#0E131F] p-2.5 rounded-xl border border-white/10">
+                <span class="text-[10px] text-slate-400 uppercase block">Hapax Legomena Ratio</span>
+                <strong id="labHapaxDisplay" class="font-mono text-amber-400 text-sm">--</strong>
+              </div>
+              <div class="bg-[#0E131F] p-2.5 rounded-xl border border-white/10">
+                <span class="text-[10px] text-slate-400 uppercase block">Avg Sentence Length</span>
+                <strong id="labAvgSentDisplay" class="font-mono text-slate-300 text-sm">-- wps</strong>
+              </div>
+              <div class="bg-[#0E131F] p-2.5 rounded-xl border border-white/10">
+                <span class="text-[10px] text-slate-400 uppercase block">Tone / Confidence</span>
+                <strong id="labConfidenceDisplay" class="font-mono text-cyan-400 text-sm">--</strong>
+              </div>
+            </div>
+
+            <!-- Lab STAR Sentence Tagging -->
+            <div>
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">Sentence-Level STAR Classifier</span>
+              <div id="labSentencesContainer" class="p-3 bg-[#0E131F] rounded-xl border border-white/10 space-y-2 text-xs max-h-48 overflow-y-auto">
+                <span class="text-slate-500 italic">Analysis results will be displayed here.</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-white/10 bg-[#07090E] py-4 text-center text-xs text-slate-500 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <span>AI Interview Coach &copy; 2026 | Computational Linguistics & AI Project</span>
+      <span class="text-[11px] text-slate-400 font-mono">100% Free & Open-Source Stack</span>
+    </div>
+  </footer>
+
+  <!-- Application Logic -->
+  <script src="/static/js/app.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
