@@ -27,14 +27,23 @@ class ResumeParser:
         try:
             import pypdf
             reader = pypdf.PdfReader(pdf_file)
+            if reader.is_encrypted:
+                raise ValueError("The PDF is encrypted and cannot be parsed.")
+            if len(reader.pages) > 50:
+                raise ValueError("The PDF exceeds the 50-page limit.")
             text_parts = []
             for page in reader.pages:
                 t = page.extract_text()
                 if t:
                     text_parts.append(t)
-            return "\n".join(text_parts)
-        except Exception as e:
-            return f"Error reading PDF: {e}"
+            text = "\n".join(text_parts).strip()
+            if not text:
+                raise ValueError("The PDF contains no extractable text.")
+            return text
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError("The PDF is malformed or could not be read.") from exc
 
     def parse_resume(self, text: str) -> Dict[str, Any]:
         """Parses resume text into structured skills, experience bullet points, and domains."""
@@ -76,7 +85,7 @@ class ResumeParser:
         return {
             "skills": extracted_skills,
             "experience_points": bullet_points[:8],
-            "detected_domains": list(set(domains))
+            "detected_domains": sorted(set(domains))
         }
 
     def generate_tailored_questions(
@@ -145,6 +154,26 @@ class ResumeParser:
 
         # 4. Job Description alignment question if JD is supplied
         if job_description and len(job_description.strip()) > 30:
+            job_match = self.match_job_description(resume_data, job_description)
+            missing_skills = job_match["missing_skills"]
+            if missing_skills:
+                focus_skills = ", ".join(missing_skills[:3])
+                questions.append({
+                    "id": f"tailored_{q_idx:02d}",
+                    "category": "Role Skill Gap",
+                    "difficulty": "Mid",
+                    "question": (
+                        f"This role emphasizes {focus_skills}, which were not explicitly "
+                        "identified in the resume. What related experience do you have, "
+                        "and how would you build proficiency in these areas?"
+                    ),
+                    "keywords": missing_skills[:3],
+                    "expected_concepts": [
+                        "Accurate account of relevant experience",
+                        "Concrete plan to address identified skill gaps"
+                    ]
+                })
+                q_idx += 1
             questions.append({
                 "id": f"tailored_{q_idx:02d}",
                 "category": "Target Role Alignment",
@@ -155,3 +184,31 @@ class ResumeParser:
             })
 
         return questions
+
+    def match_job_description(
+        self, resume_data: Dict[str, Any], job_description: str
+    ) -> Dict[str, Any]:
+        """Compares recognized resume skills with recognized job-description skills."""
+        required_data = self.parse_resume(job_description)
+        resume_skills = {
+            skill
+            for skills in resume_data.get("skills", {}).values()
+            for skill in skills
+        }
+        required_skills = {
+            skill
+            for skills in required_data.get("skills", {}).values()
+            for skill in skills
+        }
+        matched = sorted(resume_skills & required_skills)
+        missing = sorted(required_skills - resume_skills)
+        return {
+            "matched_skills": matched,
+            "missing_skills": missing,
+            "required_skills": sorted(required_skills),
+            "coverage_pct": (
+                round(len(matched) / len(required_skills) * 100, 1)
+                if required_skills else None
+            ),
+            "method": "Exact normalized matches against the built-in skills taxonomy."
+        }

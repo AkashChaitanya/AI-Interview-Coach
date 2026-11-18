@@ -55,3 +55,14 @@ def test_nlp_analyzer_comprehensive():
     assert len(res["keywords"]["matched"]) >= 2
     assert res["fluency"]["word_count"] > 20
     assert len(res["coaching_summary"]) > 0
+    assert res["tone"]["interpretation_note"].startswith("Text-only")
+    assert res["fluency"]["estimated_wpm"] == round(
+        res["fluency"]["word_count"] / 15.0 * 60, 1
+    )
+
+
+def test_text_only_analysis_does_not_invent_speaking_rate_or_overall_score():
+    result = NLPAnalyzer().analyze_comprehensive("I worked with the team and shipped the service.")
+    assert result["fluency"]["estimated_wpm"] is None
+    assert result["overall_score"] is None
+    assert result["score_components"] == {}

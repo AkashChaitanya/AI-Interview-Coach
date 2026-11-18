@@ -56,8 +56,9 @@ class FluencyDetector:
                 "hapax_legomena_ratio": 0.0,
                 "gunning_fog_index": 0.0,
                 "avg_sentence_length": 0.0,
-                "estimated_wpm": 0.0,
-                "tempo_status": "No Speech Detected",
+                "estimated_wpm": None,
+                "tempo_status": "Not measured",
+                "wpm_source": "Unavailable: no response duration",
                 "flesch_reading_ease": 0.0,
                 "fluency_score": 0.0,
                 "tips": ["No response recorded yet. Speak into the microphone or type your answer."]
@@ -97,6 +98,21 @@ class FluencyDetector:
 
         unique_tokens = len(word_freq)
         ttr = round(unique_tokens / max(1, word_count), 3) if word_count > 0 else 0.0
+        window_size = 20
+        if word_count <= window_size:
+            moving_average_ttr = ttr
+        else:
+            ttr_windows = [
+                len(set(words[i:i + window_size])) / window_size
+                for i in range(word_count - window_size + 1)
+            ]
+            moving_average_ttr = round(sum(ttr_windows) / len(ttr_windows), 3)
+        repeated_words = sum(
+            1 for previous, current in zip(words, words[1:]) if previous == current
+        )
+        clause_markers = len(re.findall(
+            r"\b(because|although|while|whereas|which|that|if|when)\b", lower_text
+        ))
 
         # Hapax legomena: words occurring exactly once
         hapax_count = sum(1 for w, c in word_freq.items() if c == 1)
@@ -111,26 +127,26 @@ class FluencyDetector:
         gunning_fog = self.calculate_gunning_fog(word_count, sentence_count, complex_words)
 
         # Words Per Minute (WPM)
-        if duration_seconds and duration_seconds > 0:
+        if duration_seconds is not None and duration_seconds > 0:
             wpm = round((word_count / duration_seconds) * 60, 1)
+            tempo_status = (
+                "Pacing: Slow / Hesitant" if wpm < config.WPM_SLOW_THRESHOLD else
+                "Pacing: Fast / Rushed" if wpm > config.WPM_FAST_THRESHOLD else
+                "Pacing: Optimal & Clear"
+            )
         else:
-            # Baseline speaking estimate: ~135 WPM standard interview pace
-            wpm = round(min(180.0, max(80.0, word_count / 0.8)), 1) if word_count < 15 else 138.0
+            wpm = None
+            tempo_status = "Not measured (audio duration unavailable)"
 
-        if wpm < config.WPM_SLOW_THRESHOLD:
-            tempo_status = "Pacing: Slow / Hesitant"
-        elif wpm > config.WPM_FAST_THRESHOLD:
-            tempo_status = "Pacing: Fast / Rushed"
-        else:
-            tempo_status = "Pacing: Optimal & Clear"
-
-        # Fluency Scoring (0 - 100)
-        base_score = 95.0
-        filler_penalty = min(35.0, filler_percentage * 3.5)
-        diversity_bonus = 5.0 if 0.45 <= ttr <= 0.85 else 0.0
-        pace_penalty = 10.0 if (wpm < 100 or wpm > 190) else 0.0
-
-        fluency_score = max(20.0, min(100.0, round(base_score - filler_penalty + diversity_bonus - pace_penalty, 1)))
+        # Fluency score uses observable transcript markers; pace is scored only when timed.
+        filler_penalty = min(45.0, filler_percentage * 3.0)
+        pace_penalty = 0.0
+        if wpm is not None:
+            if wpm < config.WPM_OPTIMAL_MIN:
+                pace_penalty = min(25.0, (config.WPM_OPTIMAL_MIN - wpm) * 0.25)
+            elif wpm > config.WPM_OPTIMAL_MAX:
+                pace_penalty = min(25.0, (wpm - config.WPM_OPTIMAL_MAX) * 0.25)
+        fluency_score = round(max(0.0, 100.0 - filler_penalty - pace_penalty), 1)
 
         # Actionable coaching tips
         tips = []
@@ -139,9 +155,9 @@ class FluencyDetector:
             top_str = ", ".join([f"'{k}' ({v}x)" for k, v in top_fillers])
             tips.append(f"Noticeable filler usage: {top_str}. Replace verbal pauses with comfortable silence.")
 
-        if wpm > config.WPM_FAST_THRESHOLD:
+        if wpm is not None and wpm > config.WPM_FAST_THRESHOLD:
             tips.append(f"Your speaking rate ({wpm} WPM) is fast. Slow down to articulate technical verbs with precision.")
-        elif wpm < config.WPM_SLOW_THRESHOLD and word_count > 10:
+        elif wpm is not None and wpm < config.WPM_SLOW_THRESHOLD and word_count > 10:
             tips.append(f"Your speaking pace ({wpm} WPM) has prolonged hesitations. Pre-structure your response using STAR.")
 
         if ttr < 0.35 and word_count > 30:
@@ -161,11 +177,18 @@ class FluencyDetector:
             "filler_percentage": filler_percentage,
             "filler_breakdown": filler_breakdown,
             "lexical_diversity": ttr,
+            "moving_average_ttr": moving_average_ttr,
             "hapax_legomena_ratio": hapax_ratio,
+            "repeated_adjacent_words": repeated_words,
+            "clause_marker_count": clause_markers,
+            "sentence_complexity_estimate": round(
+                (word_count / max(sentence_count, 1)) + clause_markers, 1
+            ),
             "gunning_fog_index": gunning_fog,
             "flesch_reading_ease": flesch_score,
             "estimated_wpm": wpm,
             "tempo_status": tempo_status,
+            "wpm_source": "Measured from transcript word count and supplied duration" if wpm is not None else "Unavailable: no audio duration supplied",
             "fluency_score": fluency_score,
             "tips": tips
         }

@@ -12,20 +12,20 @@ from core.report_generator import ReportGenerator
 report_gen = ReportGenerator()
 
 def render_radar_chart(metrics: Dict[str, float]):
-    """Renders 5-dimensional competency radar chart."""
+    """Renders available observed metrics without filling unavailable axes."""
     categories = [
-        "Technical Relevance",
-        "STAR Structure",
-        "Fluency & Flow",
-        "Speaking Tempo",
-        "Confidence & Tone"
+        "Answer relevance",
+        "STAR structure",
+        "Fluency markers",
+        "Communication clarity",
+        "Speaking pace"
     ]
     values = [
-        metrics.get("relevance", 60.0),
-        metrics.get("star", 60.0),
-        metrics.get("fluency", 70.0),
-        metrics.get("tempo", 75.0),
-        metrics.get("confidence", 70.0)
+        metrics.get("relevance"),
+        metrics.get("star"),
+        metrics.get("fluency"),
+        metrics.get("clarity"),
+        metrics.get("pace")
     ]
     # Close the loop
     categories_closed = categories + [categories[0]]
@@ -129,9 +129,19 @@ def render_session_analytics_dashboard(session_history: List[Dict[str, Any]], ca
         return
 
     # Calculate aggregations
-    scores = [item["evaluation"]["overall_score"] for item in session_history]
-    star_scores = [item["evaluation"]["star"]["star_score"] for item in session_history]
-    wpms = [item["evaluation"]["fluency"]["estimated_wpm"] for item in session_history if item["evaluation"]["fluency"]["estimated_wpm"] > 0]
+    scores = [
+        item["evaluation"]["overall_score"] for item in session_history
+        if isinstance(item["evaluation"].get("overall_score"), (int, float))
+    ]
+    star_scores = [
+        item["evaluation"]["score_components"]["star_structure"]
+        for item in session_history
+        if "star_structure" in item["evaluation"].get("score_components", {})
+    ]
+    wpms = [
+        item["evaluation"]["fluency"]["estimated_wpm"] for item in session_history
+        if isinstance(item["evaluation"]["fluency"].get("estimated_wpm"), (int, float))
+    ]
     total_fillers = sum(item["evaluation"]["fluency"]["filler_count"] for item in session_history)
 
     # Combined filler breakdown
@@ -141,19 +151,35 @@ def render_session_analytics_dashboard(session_history: List[Dict[str, Any]], ca
         for word, cnt in fb.items():
             aggregated_fillers[word] = aggregated_fillers.get(word, 0) + cnt
 
-    avg_score = sum(scores) / max(1, len(scores))
-    avg_star = sum(star_scores) / max(1, len(star_scores))
-    avg_wpm = sum(wpms) / max(1, len(wpms)) if wpms else 135.0
+    avg_score = sum(scores) / len(scores) if scores else None
+    avg_star = sum(star_scores) / len(star_scores) if star_scores else None
+    avg_wpm = sum(wpms) / len(wpms) if wpms else None
+    average_metric = lambda key: (
+        sum(item["evaluation"].get(key, 0) for item in session_history) / len(session_history)
+        if session_history else None
+    )
+    relevance_values = [
+        item["evaluation"]["score_components"]["answer_relevance"]
+        for item in session_history
+        if "answer_relevance" in item["evaluation"].get("score_components", {})
+    ]
+    fluency_values = [
+        item["evaluation"]["fluency"]["fluency_score"] for item in session_history
+    ]
+    pace_score = None if avg_wpm is None else (
+        max(0.0, 100.0 - (120.0 - avg_wpm) * 0.25) if avg_wpm < 120 else
+        max(0.0, 100.0 - (avg_wpm - 165.0) * 0.25) if avg_wpm > 165 else 100.0
+    )
 
     # Summary metrics cards
     st.markdown("### 📈 Comprehensive Linguistic Performance Scorecard")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Overall Score", f"{avg_score:.1f} / 100")
+        st.metric("Overall Score", f"{avg_score:.1f} / 100" if avg_score is not None else "Not scored")
     with col2:
-        st.metric("Avg STAR Adherence", f"{avg_star:.1f}%")
+        st.metric("Avg STAR Adherence", f"{avg_star:.1f}%" if avg_star is not None else "N/A")
     with col3:
-        st.metric("Avg Speech Pace", f"{avg_wpm:.1f} WPM")
+        st.metric("Avg Speech Pace", f"{avg_wpm:.1f} WPM" if avg_wpm is not None else "Not measured")
     with col4:
         st.metric("Total Filler Words", f"{total_fillers}")
 
@@ -164,11 +190,11 @@ def render_session_analytics_dashboard(session_history: List[Dict[str, Any]], ca
     with c_left:
         st.markdown("#### 🎯 5-Axis Competency Radar")
         radar_metrics = {
-            "relevance": avg_score,
+            "relevance": sum(relevance_values) / len(relevance_values) if relevance_values else None,
             "star": avg_star,
-            "fluency": max(20.0, 100.0 - (total_fillers * 4)),
-            "tempo": 90.0 if 120 <= avg_wpm <= 165 else 60.0,
-            "confidence": sum(item["evaluation"]["tone"]["confidence_score"] for item in session_history) / len(session_history)
+            "fluency": sum(fluency_values) / len(fluency_values) if fluency_values else None,
+            "clarity": average_metric("communication_clarity_score"),
+            "pace": pace_score
         }
         render_radar_chart(radar_metrics)
 

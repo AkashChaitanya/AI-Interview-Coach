@@ -40,7 +40,6 @@ if "initialized" not in st.session_state:
     st.session_state.candidate_name = "Candidate"
     st.session_state.selected_persona = list(config.PERSONAS.keys())[0]
     st.session_state.selected_provider = config.AI_PROVIDERS[0]
-    st.session_state.api_key = ""
     st.session_state.active_questions = []
     st.session_state.current_q_index = 0
     st.session_state.session_history = []
@@ -102,23 +101,10 @@ with st.sidebar:
         "Model Provider",
         options=config.AI_PROVIDERS,
         index=0,
-        help="The default Built-in Offline Engine is 100% free and runs completely private without any API keys."
+        help="Select a provider configured in your environment, or use the clearly labeled offline heuristic."
     )
 
-    if "Groq" in st.session_state.selected_provider:
-        st.session_state.api_key = st.text_input(
-            "Groq Free API Key",
-            type="password",
-            value=st.session_state.api_key,
-            help="Free key from console.groq.com. Enables ultra-low-latency Llama 3.3 70B!"
-        )
-    elif "Gemini" in st.session_state.selected_provider:
-        st.session_state.api_key = st.text_input(
-            "Gemini Free API Key",
-            type="password",
-            value=st.session_state.api_key,
-            help="Free key from aistudio.google.com for Gemini 1.5/2.0 Flash."
-        )
+    st.caption("Configure provider credentials in your local environment; API keys are never requested in this UI.")
 
     st.markdown("---")
     st.markdown("### 🎯 Question Filtering")
@@ -252,13 +238,13 @@ with tab_studio:
                     # 2. Conversational Follow-up Agent
                     conv_agent = ConversationAgent(
                         persona_name=st.session_state.selected_persona,
-                        provider=st.session_state.selected_provider,
-                        api_key=st.session_state.api_key
+                        provider=st.session_state.selected_provider
                     )
                     ai_reply = conv_agent.generate_response(
                         candidate_answer=answer_text,
                         current_question=current_q,
-                        nlp_evaluation=evaluation
+                        nlp_evaluation=evaluation,
+                        conversation_history=st.session_state.session_history[-6:]
                     )
 
                     # Save to state
@@ -316,10 +302,16 @@ with tab_resume:
 
         resume_text = ""
         if uploaded_file is not None:
-            if uploaded_file.name.endswith(".pdf"):
-                resume_text = resume_parser.extract_text_from_pdf(uploaded_file)
+            if uploaded_file.size > 5 * 1024 * 1024:
+                st.error("Resume upload exceeds the 5 MB limit.")
             else:
-                resume_text = uploaded_file.read().decode("utf-8", errors="ignore")
+                try:
+                    if uploaded_file.name.lower().endswith(".pdf"):
+                        resume_text = resume_parser.extract_text_from_pdf(uploaded_file)
+                    else:
+                        resume_text = uploaded_file.read().decode("utf-8")
+                except (ValueError, UnicodeDecodeError) as exc:
+                    st.error(str(exc))
         elif sample_choice == "Priya Sharma (Computational Linguist & NLP)":
             sample_path = config.DATA_DIR / "sample_resumes" / "nlp_computational_linguist.txt"
             if sample_path.exists():
@@ -430,7 +422,7 @@ with tab_bank:
 with tab_architecture:
     st.markdown("### 🧠 Computational Linguistics Architecture & Open-Source Stack")
     st.markdown(r"""
-    This project is designed from the ground up for **Computational Linguistics** and **Applied NLP**, leveraging 100% free, open-source models, libraries, and datasets.
+    This project is designed around **Computational Linguistics** and **Applied NLP**. Cloud AI providers are optional and have independent pricing, quotas, and availability.
 
     #### 1. Real-Time Multimodal Voice Pipeline
     - **Speech-to-Text (STT):** Implemented via the HTML5 **Web Speech API** (`SpeechRecognition`), providing client-side, zero-latency transcription without requiring server GPU processing.
@@ -450,9 +442,9 @@ with tab_architecture:
     - **Speech Rate (WPM):** Tracks articulation pace against the optimal human speaking window (120–165 WPM).
     - **Semantic Relevance Matching:** Cosine similarity over TF-IDF term vectors between the candidate's response and benchmark rubric rubrics.
 
-    #### 4. Free AI Provider Integrations
-    - **Built-in Offline Engine:** Zero-dependency, zero-cost rule and linguistic feedback engine running 100% private.
-    - **Groq Cloud:** Free tier access to open-source **Llama 3.3 70B** and **Llama 3 8B** via LPU hardware (<200ms latency).
-    - **Google Gemini:** Free tier access to **Gemini 1.5/2.0 Flash**.
-    - **Local Ollama:** Direct integration with locally hosted open-source models (`localhost:11434`).
+    #### 4. Optional AI Provider Integrations
+    - **Offline feedback:** Local deterministic heuristics; explicitly not an LLM and not a factual verifier.
+    - **Groq, Google Gemini, and OpenAI-compatible endpoints:** Enabled through backend environment variables.
+    - **Local Ollama:** Only attempted when explicitly enabled.
+    - Provider quotas, pricing, and latency are provider-controlled and not guaranteed.
     """)

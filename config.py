@@ -9,6 +9,10 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
 
+from dotenv import load_dotenv
+
+load_dotenv(BASE_DIR / ".env")
+
 APP_TITLE = "AI Interview Coach"
 APP_SUBTITLE = "Multimodal Voice & Computational Linguistics Mock Interview Platform"
 APP_VERSION = "2.0.0"
@@ -45,12 +49,14 @@ PERSONAS = {
     }
 }
 
-# Supported Free AI Providers
+# Providers are opt-in. Availability, pricing, and quotas depend on each provider.
 AI_PROVIDERS = [
-    "Offline Intelligent NLP Engine (Built-in, 100% Free & Private)",
-    "Groq Cloud (Llama 3.3 70B - Free, Ultra Low Latency)",
-    "Google Gemini (Gemini 1.5/2.0 Flash - Free Tier)",
-    "Local Ollama (Llama 3 / Mistral via localhost:11434)"
+    "Automatic (configured providers)",
+    "Offline linguistic feedback (no LLM)",
+    "Groq",
+    "Google Gemini",
+    "OpenAI-compatible",
+    "Local Ollama"
 ]
 
 # Speech Rate Benchmarks (Words Per Minute)

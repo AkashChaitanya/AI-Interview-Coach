@@ -2,6 +2,9 @@
 Unit tests for Voice and Conversational engines.
 """
 
+import io
+
+import pytest
 from core.voice_engine import VoiceEngine
 from core.conversation_agent import ConversationAgent
 from core.resume_parser import ResumeParser
@@ -15,7 +18,10 @@ def test_voice_engine_js_generation():
 
 
 def test_conversation_agent_offline():
-    agent = ConversationAgent(persona_name="Alex (Rigorous Tech Lead)")
+    agent = ConversationAgent(
+        persona_name="Alex (Rigorous Tech Lead)",
+        provider="Offline linguistic feedback (no LLM)"
+    )
     current_q = {
         "question": "How do you handle database race conditions in microservices?",
         "category": "Software Engineering",
@@ -34,6 +40,8 @@ def test_conversation_agent_offline():
     assert "follow_up_question" in reply
     assert "model_exemplar_answer" in reply
     assert len(reply["acknowledgment"]) > 10
+    assert reply["ai_mode"] == "offline"
+    assert "not an LLM" in reply["provider_used"]
 
 
 def test_resume_parser_skills():
@@ -51,3 +59,18 @@ def test_resume_parser_skills():
 
     tailored_qs = parser.generate_tailored_questions(parsed)
     assert len(tailored_qs) >= 2
+
+
+def test_resume_parser_rejects_malformed_pdf():
+    parser = ResumeParser()
+    with pytest.raises(ValueError, match="malformed"):
+        parser.extract_text_from_pdf(io.BytesIO(b"not a pdf"))
+
+
+def test_resume_parser_reports_job_skill_gaps():
+    parser = ResumeParser()
+    resume = parser.parse_resume("Python, FastAPI, PostgreSQL")
+    match = parser.match_job_description(resume, "Required: Python, FastAPI, Kubernetes")
+    assert match["matched_skills"] == ["FastAPI", "Python"]
+    assert match["missing_skills"] == ["Kubernetes"]
+    assert match["coverage_pct"] == pytest.approx(66.7)

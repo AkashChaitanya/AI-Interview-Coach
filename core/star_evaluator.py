@@ -20,7 +20,7 @@ class STAREvaluator:
 
         # Fallback linguistic indicator patterns if model unavailable
         self.heuristics = {
-            "Situation": [r"\bat\b", r"\bwhen i was\b", r"\bduring my\b", r"\bin my previous\b", r"\bour team was\b", r"\bwe had a problem\b", r"\bthe company\b", r"\bcontext\b"],
+            "Situation": [r"\bwhen i was\b", r"\bduring my\b", r"\bin my previous\b", r"\bour team was\b", r"\bwe had a problem\b", r"\bthe company\b", r"\bcontext\b"],
             "Task": [r"\bmy goal was\b", r"\bi was assigned\b", r"\bmy responsibility\b", r"\bthe objective\b", r"\bneeded to\b", r"\btasked with\b", r"\bhad to build\b"],
             "Action": [r"\bi built\b", r"\bi implemented\b", r"\bi designed\b", r"\bi profiled\b", r"\bi organized\b", r"\bi configured\b", r"\bi wrote\b", r"\bi refactored\b", r"\bi developed\b"],
             "Result": [r"\bas a result\b", r"\bultimately\b", r"\breduced by\b", r"\bincreased by\b", r"\bimproved\b", r"\bsaved\b", r"\boutcome was\b", r"\bhelped achieve\b", r"%", r"\$\d+"]
@@ -36,12 +36,15 @@ class STAREvaluator:
                 self.model = None
 
     def _rule_based_tag(self, sentence: str) -> str:
+        tags = self._rule_based_tags(sentence)
+        return tags[0] if tags else "General"
+
+    def _rule_based_tags(self, sentence: str) -> List[str]:
         s_lower = sentence.lower()
-        for tag, patterns in self.heuristics.items():
-            for pat in patterns:
-                if re.search(pat, s_lower):
-                    return tag
-        return "General"
+        return [
+            tag for tag, patterns in self.heuristics.items()
+            if any(re.search(pat, s_lower) for pat in patterns)
+        ]
 
     def evaluate(self, answer_text: str) -> Dict[str, Any]:
         """
@@ -67,6 +70,7 @@ class STAREvaluator:
         for sent in raw_sentences:
             tag = "General"
             conf = 0.5
+            tags = self._rule_based_tags(sent)
             if self.model:
                 try:
                     probs = self.model.predict_proba([sent])[0]
@@ -74,20 +78,24 @@ class STAREvaluator:
                     best_idx = probs.argmax()
                     tag = classes[best_idx]
                     conf = round(float(probs[best_idx]), 2)
-                    # If model is uncertain or predicts General, check heuristics
-                    if conf < 0.35 or tag == "General":
-                        rule_tag = self._rule_based_tag(sent)
-                        if rule_tag != "General":
-                            tag = rule_tag
+                    if tag in self.heuristics and tag not in tags:
+                        tags.append(tag)
+                    if not tags and tag in self.heuristics:
+                        tags = [tag]
                 except Exception:
-                    tag = self._rule_based_tag(sent)
-            else:
-                tag = self._rule_based_tag(sent)
-
-            breakdown[tag] = breakdown.get(tag, 0) + 1
+                    tag = tags[0] if tags else "General"
+            if not tags and tag in self.heuristics:
+                tags = [tag]
+            if not tags:
+                tags = ["General"]
+            if tag not in tags:
+                tag = tags[0]
+            for component in tags:
+                breakdown[component] = breakdown.get(component, 0) + 1
             tagged_sentences.append({
                 "sentence": sent,
                 "tag": tag,
+                "tags": tags,
                 "confidence": conf
             })
 
@@ -106,7 +114,7 @@ class STAREvaluator:
 
         # Bonus for well-elaborated actions and quantifiable results
         action_bonus = min(10, breakdown["Action"] * 3) if coverage["Action"] else 0
-        result_metric_bonus = 10 if (coverage["Result"] and any(re.search(r'(\d+%|\$\d+|\d+x|\d+ seconds|\d+ms)', s["sentence"]) for s in tagged_sentences if s["tag"] == "Result")) else 0
+        result_metric_bonus = 10 if (coverage["Result"] and any(re.search(r'(\d+%|\$\d+|\d+x|\d+ seconds|\d+ms)', s["sentence"]) for s in tagged_sentences if "Result" in s["tags"])) else 0
 
         final_star_score = min(100.0, float(total_score + action_bonus + result_metric_bonus))
 

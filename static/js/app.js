@@ -7,13 +7,19 @@
 let state = {
   personas: {},
   currentPersonaKey: "Dr. Maya (NLP & Computational Linguistics Expert)",
+  selectedLLMModel: "openai",
   activeQuestions: [],
   currentQIndex: 0,
   sessionHistory: [],
+  followUpAsked: new Set(),
+  sessionId: null,
   tailoredQuestions: [],
   isRecording: false,
   recognition: null,
   recordingStartTime: null,
+  recordingElapsedSeconds: 0,
+  transcriptFromSpeech: false,
+  finalTranscript: "",
   timerInterval: null,
   currentEvaluation: null,
   currentAiReply: null,
@@ -29,15 +35,32 @@ document.addEventListener("DOMContentLoaded", async () => {
   initWaveformVisualizer();
   await startNewSession();
   setupDragAndDrop();
-  // Kick off AI connectivity check and repeat every 60 seconds
-  checkAIConnectivity();
-  setInterval(checkAIConnectivity, 60000);
-  // Close connectivity panel when clicking outside
+  await loadSavedSessions();
+  await loadLLMModels();
+  checkLLMConnectivity();
+  setInterval(checkLLMConnectivity, 60000);
+
+  document.getElementById("persistSessionToggle")?.addEventListener("change", event => {
+    const status = document.getElementById("sessionPersistenceStatus");
+    if (status) {
+      status.innerText = event.target.checked
+        ? "Future answers will be saved locally after each submission."
+        : "Future answers will not be saved; previously saved sessions remain until deleted.";
+    }
+  });
+
+  // Close LLM & connectivity panels when clicking outside
   document.addEventListener("click", (e) => {
+    const llmPanel = document.getElementById("llmPanel");
+    const llmBtn = e.target.closest("[onclick*='toggleLLMPanel']");
+    if (llmPanel && !llmPanel.classList.contains("hidden") && !llmPanel.contains(e.target) && !llmBtn) {
+      llmPanel.classList.add("hidden");
+    }
+
     const panel = document.getElementById("connectivityPanel");
-    const badge  = document.getElementById("aiConnectivityBadge");
+    const badge = document.getElementById("aiConnectivityBadge");
     if (panel && !panel.classList.contains("hidden") &&
-        !panel.contains(e.target) && !badge.contains(e.target)) {
+        !panel.contains(e.target) && (!badge || !badge.contains(e.target))) {
       panel.classList.add("hidden");
     }
   });
@@ -103,22 +126,33 @@ function renderCustomPersonasList() {
     return;
   }
   container.classList.remove("hidden");
-  container.innerHTML = `
-    <div class="text-[10px] text-slate-500 uppercase font-semibold tracking-wider pt-1 pb-0.5">Custom Interviewers</div>
-  `;
+  container.replaceChildren();
+  const heading = document.createElement("div");
+  heading.className = "text-[10px] text-slate-500 uppercase font-semibold tracking-wider pt-1 pb-0.5";
+  heading.textContent = "Custom Interviewers";
+  container.appendChild(heading);
   customEntries.forEach(([key, p]) => {
     const row = document.createElement("div");
     row.className = "flex items-center justify-between gap-2 bg-[#0E131F] rounded-lg px-2.5 py-1.5 border border-white/5";
-    row.innerHTML = `
-      <div class="flex items-center gap-1.5 min-w-0">
-        <span class="text-sm shrink-0">${p.avatar || "🧑‍🏫"}</span>
-        <span class="text-[11px] text-slate-200 font-medium truncate">${key.split(" (")[0]}</span>
-        <span class="text-[10px] text-purple-400 shrink-0">Custom</span>
-      </div>
-      <button onclick="deletePersona(${JSON.stringify(key)})"
-              title="Delete this interviewer"
-              class="text-slate-500 hover:text-rose-400 text-xs transition-colors shrink-0">🗑️</button>
-    `;
+    const details = document.createElement("div");
+    details.className = "flex items-center gap-1.5 min-w-0";
+    const avatar = document.createElement("span");
+    avatar.className = "text-sm shrink-0";
+    avatar.textContent = p.avatar || "🧑‍🏫";
+    const name = document.createElement("span");
+    name.className = "text-[11px] text-slate-200 font-medium truncate";
+    name.textContent = key.split(" (")[0];
+    const badge = document.createElement("span");
+    badge.className = "text-[10px] text-purple-400 shrink-0";
+    badge.textContent = "Custom";
+    details.append(avatar, name, badge);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.title = "Delete this interviewer";
+    deleteButton.className = "text-slate-500 hover:text-rose-400 text-xs transition-colors shrink-0";
+    deleteButton.textContent = "🗑️";
+    deleteButton.addEventListener("click", () => deletePersona(key));
+    row.append(details, deleteButton);
     container.appendChild(row);
   });
 }
@@ -160,12 +194,136 @@ async function startNewSession() {
       state.activeQuestions = qs;
       state.currentQIndex = 0;
       state.sessionHistory = [];
+      state.followUpAsked = new Set();
+      state.sessionId = createSessionId();
+      state.recordingElapsedSeconds = 0;
+      state.recordingStartTime = null;
+      state.transcriptFromSpeech = false;
+      state.finalTranscript = "";
       displayCurrentQuestion();
       document.getElementById("evaluationResultsPanel").classList.add("hidden");
       updateSessionScoreHistory();
     }
   } catch (e) {
     console.error("Error starting session:", e);
+  }
+}
+
+function createSessionId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, character => {
+    const value = Math.floor(Math.random() * 16);
+    return (character === "x" ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
+
+async function saveCurrentSession() {
+  const enabled = document.getElementById("persistSessionToggle")?.checked;
+  const status = document.getElementById("sessionPersistenceStatus");
+  if (!enabled || !state.sessionId || state.sessionHistory.length === 0) return;
+  const payload = {
+    candidate_name: document.getElementById("candidateNameInput").value.trim() || "Candidate",
+    persona_name: state.currentPersonaKey,
+    session_data: {
+      active_questions: state.activeQuestions,
+      current_q_index: state.currentQIndex,
+      session_results: state.sessionHistory
+    }
+  };
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(state.sessionId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || `Save failed (${response.status}).`);
+    if (status) status.innerText = `Saved locally · ${result.question_count} response(s).`;
+    await loadSavedSessions();
+  } catch (error) {
+    if (status) status.innerText = `Local save failed: ${error.message || "server unavailable"}.`;
+  }
+}
+
+async function loadSavedSessions() {
+  const select = document.getElementById("savedSessionSelect");
+  if (!select) return;
+  try {
+    const response = await fetch("/api/sessions?limit=30");
+    const sessions = await response.json();
+    if (!response.ok) throw new Error(`Load failed (${response.status}).`);
+    select.replaceChildren();
+    if (!sessions.length) {
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "No saved sessions";
+      select.appendChild(empty);
+      return;
+    }
+    sessions.forEach(session => {
+      const option = document.createElement("option");
+      option.value = session.session_id;
+      const updated = new Date(session.updated_at).toLocaleString();
+      option.textContent = `${session.candidate_name} · ${session.question_count} answers · ${updated}`;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    const status = document.getElementById("sessionPersistenceStatus");
+    if (status) status.innerText = `Saved-session list unavailable: ${error.message || "server unavailable"}.`;
+  }
+}
+
+async function restoreSavedSession() {
+  const sessionId = document.getElementById("savedSessionSelect").value;
+  if (!sessionId) return;
+  const status = document.getElementById("sessionPersistenceStatus");
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
+    const saved = await response.json();
+    if (!response.ok) throw new Error(saved.detail || `Restore failed (${response.status}).`);
+    const data = saved.session_data;
+    if (!Array.isArray(data.active_questions) || !Array.isArray(data.session_results)) {
+      throw new Error("Saved session has an invalid data format.");
+    }
+    state.sessionId = saved.session_id;
+    state.activeQuestions = data.active_questions;
+    state.currentQIndex = Math.min(data.current_q_index || 0, state.activeQuestions.length);
+    state.sessionHistory = data.session_results;
+    state.followUpAsked = new Set(
+      data.active_questions.filter(question => question.is_follow_up).map(question => question.id)
+    );
+    document.getElementById("candidateNameInput").value = saved.candidate_name;
+    const personaSelect = document.getElementById("personaSelect");
+    if ([...personaSelect.options].some(option => option.value === saved.persona_name)) {
+      personaSelect.value = saved.persona_name;
+      onPersonaChange();
+    }
+    displayCurrentQuestion();
+    updateSessionScoreHistory();
+    const lastTurn = state.sessionHistory[state.sessionHistory.length - 1];
+    const currentQuestion = state.activeQuestions[state.currentQIndex];
+    if (lastTurn && currentQuestion?.question === lastTurn.question?.question) {
+      renderEvaluationResults(lastTurn.evaluation, lastTurn.aiReply || lastTurn.ai_reply);
+    }
+    if (status) status.innerText = "Interview restored from this device.";
+    switchTab("studio");
+  } catch (error) {
+    if (status) status.innerText = `Restore failed: ${error.message || "server unavailable"}.`;
+  }
+}
+
+async function deleteSavedSession() {
+  const sessionId = document.getElementById("savedSessionSelect").value;
+  if (!sessionId || !confirm("Permanently delete this saved interview from this device?")) return;
+  const status = document.getElementById("sessionPersistenceStatus");
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || `Delete failed (${response.status}).`);
+    if (status) status.innerText = "Saved session deleted from this device.";
+    await loadSavedSessions();
+  } catch (error) {
+    if (status) status.innerText = `Delete failed: ${error.message || "server unavailable"}.`;
   }
 }
 
@@ -196,13 +354,38 @@ function displayCurrentQuestion() {
   // Clear previous answer input
   document.getElementById("answerTranscriptInput").value = "";
   document.getElementById("wordCountLive").innerText = "0";
-  document.getElementById("wpmEstimateLive").innerText = "0";
+  document.getElementById("wpmEstimateLive").innerText = "--";
+  state.recordingElapsedSeconds = 0;
+  state.recordingStartTime = null;
+  state.transcriptFromSpeech = false;
+  state.finalTranscript = "";
   document.getElementById("evaluationResultsPanel").classList.add("hidden");
 }
 
 function nextQuestion() {
+  const currentQuestion = state.activeQuestions[state.currentQIndex];
+  const lastTurn = state.sessionHistory[state.sessionHistory.length - 1];
+  const followUp = lastTurn?.aiReply?.follow_up_question?.trim();
+  const followUpKey = currentQuestion?.id || currentQuestion?.question;
+  if (
+    currentQuestion && !currentQuestion.is_follow_up && followUp &&
+    lastTurn.question?.question === currentQuestion.question &&
+    !state.followUpAsked.has(followUpKey)
+  ) {
+    state.followUpAsked.add(followUpKey);
+    state.activeQuestions.splice(state.currentQIndex + 1, 0, {
+      id: `follow_up_${state.currentQIndex + 1}`,
+      category: currentQuestion.category,
+      difficulty: currentQuestion.difficulty,
+      question: followUp,
+      keywords: [],
+      expected_concepts: [],
+      is_follow_up: true
+    });
+  }
   state.currentQIndex++;
   displayCurrentQuestion();
+  saveCurrentSession();
 }
 
 function skipQuestion() {
@@ -212,6 +395,7 @@ function skipQuestion() {
 }
 
 function onSessionCompleted() {
+  saveCurrentSession();
   alert("🎉 You have completed all questions in this mock interview session! Switching to your Analytics Dashboard.");
   switchTab("analytics");
 }
@@ -236,21 +420,31 @@ function initSpeechRecognition() {
   };
 
   rec.onresult = (event) => {
-    let finalTrans = '';
+    const finalParts = [];
+    const interimParts = [];
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       if (event.results[i].isFinal) {
-        finalTrans += event.results[i][0].transcript + ' ';
+        finalParts.push(event.results[i][0].transcript.trim());
+      } else {
+        interimParts.push(event.results[i][0].transcript.trim());
       }
     }
     const txtArea = document.getElementById("answerTranscriptInput");
-    if (finalTrans) {
-      txtArea.value += finalTrans;
-      updateLiveTimerAndStats();
+    if (finalParts.length) {
+      state.finalTranscript = [state.finalTranscript, ...finalParts].filter(Boolean).join(" ");
+      state.transcriptFromSpeech = true;
     }
+    txtArea.value = [state.finalTranscript, ...interimParts].filter(Boolean).join(" ");
+    updateLiveTimerAndStats();
   };
 
   rec.onerror = (e) => {
     console.warn("Speech recognition warning:", e.error);
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      alert("Microphone access was denied. Allow microphone access in your browser settings or type your answer instead.");
+    } else if (e.error === "audio-capture") {
+      alert("No microphone was detected. Connect a microphone or type your answer instead.");
+    }
     stopRecording();
   };
 
@@ -280,9 +474,16 @@ function toggleSpeechRecording() {
 }
 
 function stopRecording() {
+  if (state.recordingStartTime !== null) {
+    state.recordingElapsedSeconds += Math.max(0, (Date.now() - state.recordingStartTime) / 1000);
+    state.recordingStartTime = null;
+  }
   state.isRecording = false;
   updateRecordingUI(false);
-  if (state.timerInterval) clearInterval(state.timerInterval);
+  if (state.timerInterval) {
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+  }
 }
 
 function updateRecordingUI(recording) {
@@ -312,23 +513,30 @@ function updateLiveTimerAndStats() {
   const words = text ? text.split(/\s+/).length : 0;
   document.getElementById("wordCountLive").innerText = words;
 
-  let seconds = 0;
-  if (state.recordingStartTime && state.isRecording) {
-    seconds = Math.max(1, Math.floor((Date.now() - state.recordingStartTime) / 1000));
+  let seconds = state.recordingElapsedSeconds;
+  if (state.recordingStartTime !== null && state.isRecording) {
+    seconds += Math.max(0, (Date.now() - state.recordingStartTime) / 1000);
+  }
+  if (seconds > 0) {
+    seconds = Math.floor(seconds);
     const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
     const secs = String(seconds % 60).padStart(2, '0');
     document.getElementById("recordingTimer").innerText = `${mins}:${secs}`;
-    
-    // Calculate live WPM
-    const wpm = Math.round((words / seconds) * 60);
-    document.getElementById("wpmEstimateLive").innerText = wpm;
+    const wpm = state.transcriptFromSpeech ? Math.round((words / seconds) * 60) : 0;
+    document.getElementById("wpmEstimateLive").innerText = state.transcriptFromSpeech ? wpm : "--";
+  } else {
+    document.getElementById("wpmEstimateLive").innerText = "--";
   }
 }
 
 function clearTranscript() {
   document.getElementById("answerTranscriptInput").value = "";
   document.getElementById("wordCountLive").innerText = "0";
-  document.getElementById("wpmEstimateLive").innerText = "0";
+  document.getElementById("wpmEstimateLive").innerText = "--";
+  state.recordingElapsedSeconds = 0;
+  state.recordingStartTime = null;
+  state.transcriptFromSpeech = false;
+  state.finalTranscript = "";
 }
 
 // --- Text-to-Speech (TTS) Voice Engine ---
@@ -433,9 +641,11 @@ async function submitAnswerForEvaluation() {
       body: JSON.stringify({
         answer: answer,
         question: currentQ,
-        duration_seconds: state.recordingStartTime ? (Date.now() - state.recordingStartTime) / 1000 : null
+        duration_seconds: state.transcriptFromSpeech && state.recordingElapsedSeconds > 0
+          ? state.recordingElapsedSeconds : null
       })
     });
+    if (!evalRes.ok) throw new Error(`Evaluation failed (${evalRes.status}).`);
     const evaluation = await evalRes.json();
 
     // 2. AI Conversational Follow-up
@@ -446,10 +656,25 @@ async function submitAnswerForEvaluation() {
         persona_name: state.currentPersonaKey,
         candidate_answer: answer,
         current_question: currentQ,
-        nlp_evaluation: evaluation
+        nlp_evaluation: evaluation,
+        preferred_model: state.selectedLLMModel || "openai",
+        conversation_history: state.sessionHistory.slice(-6).map(turn => ({
+          question: turn.question,
+          answer: turn.answer
+        }))
       })
     });
     const aiReply = await chatRes.json();
+    if (!chatRes.ok) {
+      throw new Error(aiReply.detail || `Interviewer response failed (${chatRes.status}).`);
+    }
+
+    if (aiReply.ai_mode === "llm" && Number.isFinite(aiReply.answer_score)) {
+      evaluation.overall_score = aiReply.answer_score;
+      evaluation.score_method = `AI rubric assessment via ${aiReply.provider_used}.`;
+      evaluation.ai_score_components = aiReply.score_components;
+      evaluation.ai_score_rationale = aiReply.score_rationale;
+    }
 
     // Render Results
     renderEvaluationResults(evaluation, aiReply);
@@ -462,11 +687,12 @@ async function submitAnswerForEvaluation() {
       aiReply: aiReply
     });
 
+    await saveCurrentSession();
     updateSessionScoreHistory();
 
   } catch (e) {
     console.error("Evaluation error:", e);
-    alert("An error occurred during evaluation. Please try again.");
+    alert(e.message || "An error occurred during evaluation. Please try again.");
   } finally {
     btn.innerHTML = `<i data-lucide="sparkles" class="w-4 h-4 text-cyan-300 mr-2"></i> Submit Answer & Receive AI Coaching`;
     btn.disabled = false;
@@ -490,7 +716,7 @@ function renderEvaluationResults(evalData, aiReply) {
     "Partially Correct":         { icon: "⚡", color: "bg-cyan-500/10 border-cyan-500/30",    label: "Partially Correct", desc: "Good foundation, but key aspects are missing or incomplete." },
     "Off-Topic / Vague":         { icon: "🌫️", color: "bg-slate-500/10 border-slate-500/30",  label: "Off-Topic / Vague", desc: "The response needs to be more focused and relevant to the question." },
   };
-  const vc = verdictConfig[verdict] || { icon: "🤖", color: "bg-purple-500/10 border-purple-500/30", label: verdict || "AI Analyzed", desc: "AI has assessed your response." };
+  const vc = verdictConfig[verdict] || { icon: "🤖", color: "bg-purple-500/10 border-purple-500/30", label: verdict || "Feedback ready", desc: "Review the feedback and rubric evidence." };
   verdictBanner.className = `flex items-center gap-3 p-3.5 rounded-xl border transition-all ${vc.color}`;
   document.getElementById("verdictIcon").innerText = vc.icon;
   document.getElementById("verdictLabel").innerText = vc.label;
@@ -503,14 +729,25 @@ function renderEvaluationResults(evalData, aiReply) {
   const currentP = state.personas[state.currentPersonaKey] || {};
   document.getElementById("subtitlePersonaAvatar").innerText = currentP.avatar || "👩‍🔬";
 
-  const feedbackText = aiReply.conversational_feedback || aiReply.acknowledgment || "Thank you for your response. Let me share my thoughts...";
+  const feedbackText = aiReply.conversational_feedback || aiReply.acknowledgment || "";
   typewriterEffect(feedbackText, "conversationalFeedbackText", 22);
 
   // ── 3. Overall Score ────────────────────────────────────────────────────────
-  const score = Math.round(evalData.overall_score || 0);
-  document.getElementById("overallScoreDisplay").innerText = score;
+  const score = Number.isFinite(evalData.overall_score) ? Math.round(evalData.overall_score) : null;
+  document.getElementById("overallScoreDisplay").innerText = score === null ? "—" : score;
+  const scoreMethod = document.getElementById("scoreMethodText");
+  if (evalData.ai_score_components) {
+    const components = evalData.ai_score_components;
+    scoreMethod.innerText = `${evalData.score_method} Accuracy ${components.technical_accuracy}, completeness ${components.completeness}, clarity ${components.clarity}. ${evalData.ai_score_rationale || ""}`;
+  } else {
+    scoreMethod.innerText = evalData.score_method || "Score method unavailable.";
+  }
+  document.getElementById("scoreScaleLabel").classList.toggle("hidden", score === null);
   const ratingBadge = document.getElementById("scoreRatingBadge");
-  if (score >= 80) {
+  if (score === null) {
+    ratingBadge.className = "ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-500/10 text-slate-300 border border-slate-500/20";
+    ratingBadge.innerText = "Unscored: no rubric";
+  } else if (score >= 80) {
     ratingBadge.className = "ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
     ratingBadge.innerText = "🌟 Exceptional / Senior";
   } else if (score >= 60) {
@@ -523,7 +760,9 @@ function renderEvaluationResults(evalData, aiReply) {
 
   // ── 4. WPM & Fillers & STAR ─────────────────────────────────────────────────
   const fluency = evalData.fluency || {};
-  document.getElementById("evalWPMDisplay").innerText = `${fluency.estimated_wpm || 135} WPM`;
+  document.getElementById("evalWPMDisplay").innerText =
+    fluency.estimated_wpm === null || fluency.estimated_wpm === undefined
+      ? "Not measured" : `${fluency.estimated_wpm} WPM`;
   document.getElementById("evalFillerDisplay").innerText = fluency.filler_count || 0;
   document.getElementById("evalSTARDisplay").innerText = `${Math.round(evalData.star?.star_score || 0)}%`;
 
@@ -542,15 +781,25 @@ function renderEvaluationResults(evalData, aiReply) {
       else if (item.tag === "Task") badgeClass = "badge-task";
       else if (item.tag === "Action") badgeClass = "badge-action";
       else if (item.tag === "Result") badgeClass = "badge-result";
-      p.innerHTML = `<span class="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mr-1.5 uppercase ${badgeClass}">${item.tag}</span> <span class="text-slate-200">${item.sentence}</span>`;
+      const badge = document.createElement("span");
+      badge.className = `inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mr-1.5 uppercase ${badgeClass}`;
+      badge.textContent = (item.tags || [item.tag]).join(" / ");
+      const sentence = document.createElement("span");
+      sentence.className = "text-slate-200";
+      sentence.textContent = item.sentence;
+      p.append(badge, sentence);
       starContainer.appendChild(p);
     });
   }
 
   // ── 6. Interviewer Response ──────────────────────────────────────────────────
-  document.getElementById("interviewerAckText").innerText = `"${aiReply.acknowledgment || 'Good points discussed.'}"`;
-  document.getElementById("interviewerFollowUpText").innerText = `"${aiReply.follow_up_question || 'How would you scale this in production?'}"`;
-  document.getElementById("modelExemplarText").innerText = aiReply.model_exemplar_answer || "A senior answer clearly frames the background, action steps, and quantitative outcome.";
+  document.getElementById("interviewerAckText").innerText = `"${aiReply.acknowledgment}"`;
+  document.getElementById("interviewerFollowUpText").innerText = `"${aiReply.follow_up_question}"`;
+  document.getElementById("modelExemplarText").innerText = aiReply.model_exemplar_answer;
+  const providerNote = aiReply.ai_mode === "offline"
+    ? `Offline linguistic feedback (not an LLM).`
+    : `LLM feedback via ${aiReply.provider_used || "configured provider"}.`;
+  document.getElementById("verdictDescription").innerText += ` ${providerNote}`;
 
   // Scroll to results panel smoothly
   panel.scrollIntoView({ behavior: 'smooth' });
@@ -567,20 +816,26 @@ function updateSessionScoreHistory() {
   }
 
   let totalScore = 0;
+  let scoredCount = 0;
   state.sessionHistory.forEach((item, idx) => {
-    const sc = Math.round(item.evaluation?.overall_score || 0);
-    totalScore += sc;
+    const rawScore = item.evaluation?.overall_score;
+    const sc = Number.isFinite(rawScore) ? Math.round(rawScore) : null;
+    if (sc !== null) {
+      totalScore += sc;
+      scoredCount++;
+    }
     const row = document.createElement("div");
     row.className = "flex items-center justify-between py-1 border-b border-white/5";
     row.innerHTML = `
       <span class="truncate max-w-[170px] text-slate-300">Q${idx + 1}: ${item.question?.category || 'Tech'}</span>
-      <span class="font-mono font-bold text-emerald-400">${sc} pts</span>
+      <span class="font-mono font-bold text-emerald-400">${sc === null ? "Not scored" : `${sc} pts`}</span>
     `;
     container.appendChild(row);
   });
 
-  const avg = Math.round(totalScore / state.sessionHistory.length);
-  document.getElementById("sessionAvgScoreLabel").innerText = `Avg: ${avg} / 100`;
+  const avg = scoredCount ? Math.round(totalScore / scoredCount) : null;
+  document.getElementById("sessionAvgScoreLabel").innerText =
+    avg === null ? "Avg: not scored" : `Avg: ${avg} / 100`;
 }
 
 // --- Resume & JD Tailoring ---
@@ -634,7 +889,16 @@ async function parseAndGenerateTailoredQuestions() {
 
   const formData = new FormData();
   if (fileInput.files && fileInput.files[0]) {
-    formData.append("file", fileInput.files[0]);
+    const resumeFile = fileInput.files[0];
+    if (!/\.(pdf|txt)$/i.test(resumeFile.name)) {
+      alert("Please select a PDF or TXT resume.");
+      return;
+    }
+    if (resumeFile.size > 5 * 1024 * 1024) {
+      alert("Resume upload exceeds the 5 MB limit.");
+      return;
+    }
+    formData.append("file", resumeFile);
   } else {
     // Default to NLP sample if empty
     formData.append("sample_name", "Priya Sharma (NLP)");
@@ -657,6 +921,7 @@ async function parseResumePayload(payload) {
       res = await fetch("/api/resume/parse", { method: "POST", body: fd });
     }
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `Resume analysis failed (${res.status}).`);
 
     // Render Extracted Skills
     const skillsContainer = document.getElementById("extractedSkillsContainer");
@@ -678,6 +943,21 @@ async function parseResumePayload(payload) {
     }
 
     // Render Tailored Questions
+    const matchContainer = document.getElementById("jobMatchContainer");
+    matchContainer.replaceChildren();
+    if (data.job_match) {
+      matchContainer.classList.remove("hidden");
+      const title = document.createElement("div");
+      title.className = "text-xs font-semibold text-slate-300";
+      title.textContent = `Job skill coverage: ${data.job_match.coverage_pct ?? "Not scored"}${data.job_match.coverage_pct === null ? "" : "%"}`;
+      const skills = document.createElement("p");
+      skills.className = "text-[11px] text-slate-400";
+      skills.textContent = `Matched: ${data.job_match.matched_skills.join(", ") || "none detected"} · Gaps: ${data.job_match.missing_skills.join(", ") || "none detected"}`;
+      matchContainer.append(title, skills);
+    } else {
+      matchContainer.classList.add("hidden");
+    }
+
     const qContainer = document.getElementById("tailoredQuestionsContainer");
     qContainer.innerHTML = "";
     state.tailoredQuestions = data.tailored_questions || [];
@@ -687,20 +967,26 @@ async function parseResumePayload(payload) {
       state.tailoredQuestions.forEach((q, idx) => {
         const card = document.createElement("div");
         card.className = "p-3 bg-[#0E131F] rounded-xl border border-white/10 space-y-1.5";
-        card.innerHTML = `
-          <div class="flex items-center justify-between text-[11px]">
-            <span class="text-purple-400 font-semibold uppercase">${q.category}</span>
-            <span class="text-cyan-400">${q.difficulty}</span>
-          </div>
-          <p class="text-xs text-slate-100 font-medium">${idx + 1}. ${q.question}</p>
-        `;
+        const metadata = document.createElement("div");
+        metadata.className = "flex items-center justify-between text-[11px]";
+        const category = document.createElement("span");
+        category.className = "text-purple-400 font-semibold uppercase";
+        category.textContent = q.category;
+        const difficulty = document.createElement("span");
+        difficulty.className = "text-cyan-400";
+        difficulty.textContent = q.difficulty;
+        metadata.append(category, difficulty);
+        const questionText = document.createElement("p");
+        questionText.className = "text-xs text-slate-100 font-medium";
+        questionText.textContent = `${idx + 1}. ${q.question}`;
+        card.append(metadata, questionText);
         qContainer.appendChild(card);
       });
     }
 
   } catch (e) {
     console.error("Resume parsing error:", e);
-    alert("Error parsing resume. Please ensure file format is PDF or TXT.");
+    alert(e.message || "Error parsing resume. Please ensure file format is PDF or TXT.");
   }
 }
 
@@ -709,6 +995,8 @@ function loadTailoredQuestionsIntoStudio() {
   state.activeQuestions = state.tailoredQuestions;
   state.currentQIndex = 0;
   state.sessionHistory = [];
+  state.followUpAsked = new Set();
+  state.sessionId = createSessionId();
   displayCurrentQuestion();
   switchTab("studio");
   alert("✨ Tailored questions loaded into your Live Studio! Start answering question 1.");
@@ -725,43 +1013,66 @@ function renderAnalyticsDashboard() {
     return;
   }
 
-  const scores = history.map(h => h.evaluation.overall_score || 0);
-  const stars = history.map(h => h.evaluation.star?.star_score || 0);
-  const wpms = history.map(h => h.evaluation.fluency?.estimated_wpm || 135);
+  const scores = history.map(h => h.evaluation.overall_score).filter(Number.isFinite);
+  const stars = history
+    .filter(h => h.evaluation.score_components?.star_structure !== undefined)
+    .map(h => h.evaluation.score_components.star_structure);
+  const wpms = history.map(h => h.evaluation.fluency?.estimated_wpm).filter(Number.isFinite);
+  const fluencyScores = history.map(h => h.evaluation.fluency?.fluency_score).filter(Number.isFinite);
+  const clarityScores = history.map(h => h.evaluation.communication_clarity_score).filter(Number.isFinite);
+  const relevanceScores = history
+    .map(h => h.evaluation.score_components?.answer_relevance)
+    .filter(Number.isFinite);
   const fillers = history.map(h => h.evaluation.fluency?.filler_count || 0);
 
-  const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-  const avgStar = Math.round(stars.reduce((a, b) => a + b, 0) / stars.length);
-  const avgWpm = Math.round(wpms.reduce((a, b) => a + b, 0) / wpms.length);
+  const average = values => values.length
+    ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  const avgScore = average(scores);
+  const avgStar = average(stars);
+  const avgWpm = average(wpms);
   const totalFillers = fillers.reduce((a, b) => a + b, 0);
 
-  document.getElementById("analyticsAvgScore").innerText = `${avgScore} / 100`;
-  document.getElementById("analyticsAvgSTAR").innerText = `${avgStar}%`;
-  document.getElementById("analyticsAvgWPM").innerText = `${avgWpm} WPM`;
+  document.getElementById("analyticsAvgScore").innerText =
+    avgScore === null ? "Not scored" : `${avgScore.toFixed(0)} / 100`;
+  document.getElementById("analyticsAvgSTAR").innerText =
+    avgStar === null ? "N/A" : `${avgStar.toFixed(0)}%`;
+  document.getElementById("analyticsAvgWPM").innerText =
+    avgWpm === null ? "Not measured" : `${avgWpm.toFixed(0)} WPM`;
   document.getElementById("analyticsTotalFillers").innerText = totalFillers;
 
-  // Render Radar Chart
-  renderRadarChart(avgScore, avgStar, avgWpm, totalFillers);
+  renderRadarChart({
+    relevance: average(relevanceScores),
+    star: avgStar,
+    fluency: average(fluencyScores),
+    clarity: average(clarityScores),
+    wpm: avgWpm
+  });
   // Render Filler Bar Chart
   renderFillerBarChart();
 }
 
-function renderRadarChart(score, star, wpm, fillers) {
+function renderRadarChart(metrics) {
   const ctx = document.getElementById("competencyRadarChart");
   if (!ctx) return;
 
   if (state.radarChart) state.radarChart.destroy();
 
-  const fluencyRating = Math.max(20, 100 - fillers * 5);
-  const tempoRating = (wpm >= 120 && wpm <= 165) ? 95 : 65;
+  let paceScore = null;
+  if (metrics.wpm !== null) {
+    paceScore = metrics.wpm < 120
+      ? Math.max(0, 100 - (120 - metrics.wpm) * 0.25)
+      : metrics.wpm > 165
+        ? Math.max(0, 100 - (metrics.wpm - 165) * 0.25)
+        : 100;
+  }
 
   state.radarChart = new Chart(ctx, {
     type: 'radar',
     data: {
-      labels: ['Technical Depth', 'STAR Structure', 'Fluency Flow', 'Speaking Pace', 'Assertive Tone'],
+      labels: ['Answer relevance', 'STAR structure', 'Fluency markers', 'Communication clarity', 'Speaking pace'],
       datasets: [{
-        label: 'Candidate Competency',
-        data: [score, star, fluencyRating, tempoRating, 80],
+        label: 'Measured indicators',
+        data: [metrics.relevance, metrics.star, metrics.fluency, metrics.clarity, paceScore],
         backgroundColor: 'rgba(139, 92, 246, 0.25)',
         borderColor: '#8B5CF6',
         pointBackgroundColor: '#06B6D4',
@@ -851,19 +1162,23 @@ async function downloadReport(format) {
   }
 
   const candidateName = document.getElementById("candidateNameInput").value || "Candidate";
-  const scores = state.sessionHistory.map(h => h.evaluation.overall_score || 0);
-  const stars = state.sessionHistory.map(h => h.evaluation.star?.star_score || 0);
-  const wpms = state.sessionHistory.map(h => h.evaluation.fluency?.estimated_wpm || 135);
+  const scores = state.sessionHistory.map(h => h.evaluation.overall_score).filter(Number.isFinite);
+  const stars = state.sessionHistory
+    .filter(h => h.evaluation.score_components?.star_structure !== undefined)
+    .map(h => h.evaluation.score_components.star_structure);
+  const wpms = state.sessionHistory.map(h => h.evaluation.fluency?.estimated_wpm).filter(Number.isFinite);
   const fillers = state.sessionHistory.map(h => h.evaluation.fluency?.filler_count || 0);
+  const average = values => values.length
+    ? values.reduce((a, b) => a + b, 0) / values.length : null;
 
   const payload = {
     candidate_name: candidateName,
     persona_name: state.currentPersonaKey,
     session_results: state.sessionHistory,
     overall_summary: {
-      average_score: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
-      average_star: Math.round(stars.reduce((a, b) => a + b, 0) / stars.length),
-      average_wpm: Math.round(wpms.reduce((a, b) => a + b, 0) / wpms.length),
+      average_score: average(scores),
+      average_star: average(stars),
+      average_wpm: average(wpms),
       total_fillers: fillers.reduce((a, b) => a + b, 0)
     }
   };
@@ -959,6 +1274,8 @@ function practiceQuestionDirectly(q) {
   state.activeQuestions = [q];
   state.currentQIndex = 0;
   state.sessionHistory = [];
+  state.followUpAsked = new Set();
+  state.sessionId = createSessionId();
   displayCurrentQuestion();
   switchTab("studio");
 }
@@ -1028,7 +1345,9 @@ async function runLabAnalysis() {
 function typewriterEffect(text, elementId, speed = 22) {
   const el = document.getElementById(elementId);
   if (!el) return;
-  el.innerText = "";
+  const content = String(text);
+  const textNode = document.createTextNode("");
+  el.replaceChildren(textNode);
 
   // Show the "typing" dots indicator
   const typingDot = document.getElementById("subtitleTypingDot");
@@ -1036,8 +1355,8 @@ function typewriterEffect(text, elementId, speed = 22) {
 
   let i = 0;
   function tick() {
-    if (i < text.length) {
-      el.innerText += text[i++];
+    if (i < content.length) {
+      textNode.appendData(content[i++]);
       setTimeout(tick, speed);
     } else {
       // Done — hide typing indicator
@@ -1079,8 +1398,10 @@ async function checkAIConnectivity() {
 
     // Update badge label
     const labelText = online
-      ? `${data.provider || "Pollinations"} · ${latency}`
-      : (fallback ? "Fallback (Offline Mode)" : "AI Offline");
+        ? `${data.provider || "Configured provider"} · ${latency}`
+        : (data.ai_mode === "configured"
+          ? "Provider configured · not yet verified"
+          : (fallback ? "Offline feedback · not an LLM" : "No provider available"));
     if (label) {
       label.innerText = labelText;
       label.className = online ? "text-emerald-300 transition-colors" : (fallback ? "text-amber-300 transition-colors" : "text-rose-300 transition-colors");
@@ -1146,8 +1467,7 @@ function onModalBackdropClick(e) {
 }
 
 /**
- * Calls /api/personas/ai-generate with the user's prompt.
- * On success, fills in all the form fields automatically.
+ * Requests a local heuristic persona draft and fills the form.
  */
 async function aiGeneratePersona() {
   const prompt = document.getElementById("personaGenPrompt").value.trim();
@@ -1164,7 +1484,7 @@ async function aiGeneratePersona() {
   btn.disabled = true;
   spinner.classList.remove("hidden");
   btnText.innerText = "Generating...";
-  status.innerText = "🤖 AI is designing your interviewer...";
+  status.innerText = "Drafting a local heuristic persona...";
   status.classList.remove("hidden");
 
   try {
@@ -1175,7 +1495,7 @@ async function aiGeneratePersona() {
     });
     const data = await res.json();
 
-    if (data.error) throw new Error(data.error);
+    if (!res.ok) throw new Error(data.detail || `Draft generation failed (${res.status}).`);
 
     // Fill in form fields from AI response
     const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
@@ -1187,14 +1507,14 @@ async function aiGeneratePersona() {
     set("newPersonaFocus",  data.special_focus);
 
     // Set domain dropdown if matching
-    if (data.domain) {
+    if (data.default_domain) {
       const domSel = document.getElementById("newPersonaDomain");
       const opts = Array.from(domSel.options);
-      const match = opts.find(o => o.value.toLowerCase().includes(data.domain.toLowerCase().split(" ")[0]));
+      const match = opts.find(o => o.value.toLowerCase().includes(data.default_domain.toLowerCase().split(" ")[0]));
       if (match) domSel.value = match.value;
     }
 
-    status.innerText = "✅ AI-generated persona filled in! Review and save.";
+    status.innerText = "✅ Local heuristic draft filled in (not an LLM). Review and save.";
     status.className = "text-[11px] text-emerald-400";
 
   } catch (err) {
@@ -1204,7 +1524,7 @@ async function aiGeneratePersona() {
   } finally {
     btn.disabled = false;
     spinner.classList.add("hidden");
-    btnText.innerText = "Generate";
+    btnText.innerText = "Draft";
   }
 }
 
@@ -1329,4 +1649,164 @@ function showToast(message, color = "purple") {
     toast.style.transform = "translateY(4px)";
     setTimeout(() => toast.remove(), 350);
   }, 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ★ FEATURE: Dynamic LLM Model Selector & Autofetch Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let activeLLMModel = "openai";
+
+async function loadLLMModels() {
+  try {
+    const res = await fetch("/api/llm/models");
+    const data = await res.json();
+    const select = document.getElementById("llmModelSelect");
+    if (select && data.models && data.models.length > 0) {
+      select.innerHTML = "";
+      data.models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        opt.innerText = `${m.display}${m.free ? " 🆓" : ""}`;
+        if (m.id === data.default || m.id === activeLLMModel) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+    const currentModelId = state.selectedLLMModel || data.default || "openai";
+    const active = (data.models || []).find(m => m.id === currentModelId) || data.models?.[0];
+    if (active) updateLLMBadge(active.display.replace(" 🆓",""), true);
+  } catch (e) {
+    console.warn("Could not fetch LLM models:", e);
+    updateLLMBadge("GPT-4o-mini (Pollinations)", true);
+  }
+}
+
+async function checkLLMConnectivity() {
+  const dot = document.getElementById("llmStatusDot");
+  const label = document.getElementById("llmActiveLabel");
+  if (dot) dot.className = "w-2 h-2 rounded-full bg-slate-500 animate-pulse";
+  if (label && label.innerText === "Loading model...") label.innerText = "Connecting...";
+
+  try {
+    const res = await fetch("/api/ai/connectivity");
+    const data = await res.json();
+    const online = data.online === true;
+
+    updateLLMBadge(
+      online ? (data.model || "Free LLM Connected") : (data.provider !== "None" ? data.provider : "Offline Fallback"),
+      online
+    );
+
+    const panelDot = document.getElementById("llmPanelDot");
+    const statusRow = document.getElementById("llmStatusRow");
+    const statusText = document.getElementById("llmStatusText");
+    const latencyText = document.getElementById("llmLatencyText");
+
+    if (panelDot) panelDot.className = `w-3 h-3 rounded-full ${online ? "bg-emerald-400 animate-pulse" : "bg-amber-400"} shrink-0`;
+    if (statusRow) statusRow.className = `flex items-center gap-3 p-3 rounded-xl ${online ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-amber-500/10 border border-amber-500/20"}`;
+    if (statusText) statusText.innerText = data.status_text || (online ? "Connected — Free LLM Active" : "Offline linguistic mode");
+    if (latencyText) latencyText.innerText = online && data.latency_ms ? `Latency: ${Math.round(data.latency_ms)}ms` : "Fallback active";
+
+  } catch (e) {
+    updateLLMBadge("Connection check error", false);
+  }
+}
+
+function updateLLMBadge(modelName, online) {
+  const dot = document.getElementById("llmStatusDot");
+  const label = document.getElementById("llmActiveLabel");
+  if (dot) dot.className = `w-2 h-2 rounded-full ${online ? "bg-emerald-400 animate-pulse" : "bg-amber-400"} transition-colors`;
+  if (label) label.innerText = modelName;
+}
+
+function toggleLLMPanel() {
+  const panel = document.getElementById("llmPanel");
+  if (panel) panel.classList.toggle("hidden");
+}
+
+function onLLMModelChange() {
+  const select = document.getElementById("llmModelSelect");
+  if (select) {
+    activeLLMModel = select.value;
+    state.selectedLLMModel = activeLLMModel;
+    const text = select.options[select.selectedIndex].text.replace(" 🆓","");
+    updateLLMBadge(text, true);
+    showToast(`🤖 Switched active LLM to: ${text}`, "purple");
+  }
+}
+
+async function recheckLLM() {
+  showToast("🔄 Re-checking LLM connection...", "slate");
+  await checkLLMConnectivity();
+  await loadLLMModels();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ★ FEATURE: Report Preview & PDF Download
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function previewReport() {
+  if (!state.sessionHistory || state.sessionHistory.length === 0) {
+    showToast("⚠️ Please answer at least one question in the Live Studio first.", "amber");
+    return;
+  }
+
+  const candidateName = document.getElementById("candidateNameInput")?.value?.trim() || "Candidate";
+  const scores = state.sessionHistory.map(h => h.evaluation?.overall_score || 0);
+  const stars = state.sessionHistory.map(h => h.evaluation?.star?.star_score || 0);
+  const wpms = state.sessionHistory.map(h => h.evaluation?.fluency?.estimated_wpm || 135);
+  const fillers = state.sessionHistory.map(h => h.evaluation?.fluency?.filler_count || 0);
+
+  const payload = {
+    candidate_name: candidateName,
+    persona_name: state.currentPersonaKey,
+    session_results: state.sessionHistory,
+    overall_summary: {
+      average_score: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+      average_star: Math.round(stars.reduce((a, b) => a + b, 0) / stars.length),
+      average_wpm: Math.round(wpms.reduce((a, b) => a + b, 0) / wpms.length),
+      total_fillers: fillers.reduce((a, b) => a + b, 0)
+    }
+  };
+
+  const modal = document.getElementById("reportPreviewModal");
+  const frame = document.getElementById("reportPreviewFrame");
+  const nameEl = document.getElementById("reportCandidateName");
+  if (nameEl) nameEl.innerText = candidateName;
+
+  modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+
+  try {
+    const res = await fetch("/api/report/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`Report generation failed (${res.status})`);
+    const html = await res.text();
+    frame.srcdoc = html;
+  } catch (err) {
+    console.error("Report preview error:", err);
+    frame.srcdoc = `<div style="font-family:sans-serif;padding:30px;color:#dc2626;text-align:center;">
+      <h3>Failed to generate report preview</h3>
+      <p>${err.message}</p>
+    </div>`;
+  }
+}
+
+function closeReportPreview() {
+  const modal = document.getElementById("reportPreviewModal");
+  if (modal) modal.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+function downloadReportPDF() {
+  const frame = document.getElementById("reportPreviewFrame");
+  if (frame && frame.contentWindow) {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  } else {
+    showToast("⚠️ Unable to trigger print dialog directly. Please use Ctrl+P.", "amber");
+  }
 }

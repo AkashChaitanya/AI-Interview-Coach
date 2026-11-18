@@ -15,6 +15,7 @@ ENV/
 .audio_cache/
 .cache/
 .pytest_cache/
+data/interviews.sqlite3
 
 # Streamlit
 .streamlit/

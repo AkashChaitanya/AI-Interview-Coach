@@ -74,6 +74,19 @@ body {
   transform: translateY(-2px);
 }
 
+#conversationalFeedbackBox {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+#conversationalFeedbackText {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
 /* Neon Gradient Header */
 .text-gradient {
   background: linear-gradient(135deg, #A78BFA 0%, #60A5FA 50%, #34D399 100%);

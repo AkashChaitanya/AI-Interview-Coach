@@ -1,24 +1,20 @@
 {
   "evaluation_criteria": {
-    "technical_depth": {
-      "weight": 0.25,
-      "description": "Accuracy of technical terms, correctness of algorithmic complexity, and grasp of foundational mechanics."
+    "answer_relevance": {
+      "weight": "0.55 technical / 0.35 behavioral",
+      "description": "Weighted keyword coverage and TF-IDF lexical similarity to expected concepts; not embedding-based factual verification."
     },
     "star_structure": {
-      "weight": 0.25,
-      "description": "Adherence to Situation, Task, Action, and Result framing with clear context and measurable outcomes."
+      "weight": "0.25 behavioral / excluded for other categories",
+      "description": "Used only for behavioral questions; measures detectable Situation, Task, Action, and Result structure."
     },
-    "clarity_fluency": {
+    "fluency_markers": {
       "weight": 0.2,
-      "description": "Sentence structure, readability, absence of excessive filler words (um, uh, like), and optimal speech pace (120-160 WPM)."
+      "description": "Transcript filler markers and pace only when response duration is supplied."
     },
-    "relevance_keywords": {
-      "weight": 0.2,
-      "description": "Coverage of expected domain terminology and addressing the core prompt directly."
-    },
-    "sentiment_confidence": {
-      "weight": 0.1,
-      "description": "Tone of confidence, professional assertiveness, and constructive problem-solving mindset."
+    "communication_clarity": {
+      "weight": "0.25 technical / 0.20 behavioral",
+      "description": "Sentence-length range and explicit discourse-transition markers; not a psychological assessment."
     }
   },
   "star_definitions": {

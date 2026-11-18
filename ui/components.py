@@ -2,6 +2,8 @@
 Reusable UI Components for AI Interview Coach.
 """
 
+import html
+
 import streamlit as st
 import config
 from core.voice_engine import VoiceEngine
@@ -18,8 +20,8 @@ def render_header():
             <span class="tag-badge">✨ Voice-Enabled STT & TTS</span>
             <span class="tag-badge">⭐ STAR Method Tagger</span>
             <span class="tag-badge">🧠 Computational Linguistics</span>
-            <span class="tag-badge">🆓 100% Free & Open-Source</span>
-            <span class="tag-badge">⚡ Sub-Second Feedback</span>
+            <span class="tag-badge">🤖 Optional AI Providers</span>
+            <span class="tag-badge">🔒 Offline Feedback Available</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -47,24 +49,47 @@ def render_persona_card(persona_name: str):
 
 def render_evaluation_card(evaluation: dict, ai_response: str):
     """Renders real-time feedback, STAR tags, fluency, and AI follow-up."""
-    score = evaluation.get("overall_score", 0.0)
+    score = evaluation.get("overall_score")
     star = evaluation.get("star", {})
     coverage = star.get("coverage", {})
     fluency = evaluation.get("fluency", {})
     tone = evaluation.get("tone", {})
     keywords = evaluation.get("keywords", {})
+    if isinstance(ai_response, dict):
+        response_text = " ".join(
+            part for part in (
+                ai_response.get("acknowledgment", ""),
+                ai_response.get("conversational_feedback", ""),
+                ai_response.get("follow_up_question", "")
+            ) if part
+        )
+        provider_note = (
+            "Offline heuristic feedback (not an LLM)."
+            if ai_response.get("ai_mode") == "offline"
+            else f"LLM provider: {ai_response.get('provider_used', 'configured provider')}."
+        )
+    else:
+        response_text = str(ai_response or "")
+        provider_note = ""
+    response_speech = response_text
+    response_text = html.escape(response_text)
 
     # Overall Score Header
-    color = "#4ADE80" if score >= 80 else "#FBBF24" if score >= 60 else "#F87171"
+    color = "#94A3B8" if score is None else "#4ADE80" if score >= 80 else "#FBBF24" if score >= 60 else "#F87171"
+    score_text = f"{score:.1f}" if isinstance(score, (int, float)) else "Not scored"
+    wpm = fluency.get("estimated_wpm")
+    wpm_text = f"{wpm} WPM" if isinstance(wpm, (int, float)) else "Not measured"
+    keyword_coverage = keywords.get("coverage_pct")
+    keyword_text = f"{keyword_coverage:.0f}%" if isinstance(keyword_coverage, (int, float)) else "N/A"
     st.markdown(f"""
     <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 18px; margin: 16px 0;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px; margin-bottom: 14px;">
             <div>
                 <span style="font-size: 0.85rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">Answer Performance Score</span>
-                <div style="font-size: 2rem; font-weight: 800; color: {color};">{score:.1f} <span style="font-size: 1rem; color: #94A3B8;">/ 100</span></div>
+                <div style="font-size: 2rem; font-weight: 800; color: {color};">{score_text} <span style="font-size: 1rem; color: #94A3B8;">{" / 100" if score_text != "Not scored" else ""}</span></div>
             </div>
             <div style="text-align: right;">
-                <span style="font-size: 0.85rem; color: #94A3B8;">Confidence Tone</span>
+                <span style="font-size: 0.85rem; color: #94A3B8;">Communication Markers</span>
                 <div style="font-size: 1.1rem; font-weight: 600; color: #F1F5F9;">{tone.get('tone_label', 'Neutral')}</div>
             </div>
         </div>
@@ -72,15 +97,15 @@ def render_evaluation_card(evaluation: dict, ai_response: str):
         <!-- Metric Grid -->
         <div class="metric-grid">
             <div class="metric-tile">
-                <div class="metric-label">Words Spoken</div>
+                <div class="metric-label">Words in Transcript</div>
                 <div class="metric-value">{fluency.get('word_count', 0)}</div>
             </div>
             <div class="metric-tile">
                 <div class="metric-label">Speaking Rate</div>
-                <div class="metric-value">{fluency.get('estimated_wpm', 0)} <span style="font-size: 0.8rem; color: #94A3B8;">WPM</span></div>
+                <div class="metric-value">{wpm_text}</div>
             </div>
             <div class="metric-tile">
-                <div class="metric-label">Filler Words</div>
+                <div class="metric-label">Text Filler Markers</div>
                 <div class="metric-value" style="color: {'#4ADE80' if fluency.get('filler_count', 0) <= 2 else '#F87171'};">{fluency.get('filler_count', 0)}</div>
             </div>
             <div class="metric-tile">
@@ -89,7 +114,7 @@ def render_evaluation_card(evaluation: dict, ai_response: str):
             </div>
             <div class="metric-tile">
                 <div class="metric-label">Keyword Match</div>
-                <div class="metric-value">{keywords.get('coverage_pct', 0):.0f}%</div>
+                <div class="metric-value">{keyword_text}</div>
             </div>
         </div>
 
@@ -103,6 +128,8 @@ def render_evaluation_card(evaluation: dict, ai_response: str):
         </div>
     </div>
     """, unsafe_allow_html=True)
+    if evaluation.get("score_method"):
+        st.caption(evaluation["score_method"])
 
     # Interviewer follow-up voice & text
     if ai_response:
@@ -112,12 +139,13 @@ def render_evaluation_card(evaluation: dict, ai_response: str):
                 <span style="font-size: 1.2rem;">💬</span>
                 <strong style="color: #60A5FA;">Interviewer Follow-up & Feedback:</strong>
             </div>
-            <p style="color: #F1F5F9; font-size: 1rem; line-height: 1.5; margin: 0 0 10px 0;">"{ai_response}"</p>
+            <p style="color: #F1F5F9; font-size: 1rem; line-height: 1.5; margin: 0 0 10px 0;">"{response_text}"</p>
+            <p style="color: #94A3B8; font-size: 0.75rem; margin: 0;">{html.escape(provider_note)}</p>
         </div>
         """, unsafe_allow_html=True)
 
         # Audio playback for interviewer's response
-        audio_html = voice_engine.get_audio_player_html(ai_response, autoplay=False)
+        audio_html = voice_engine.get_audio_player_html(response_speech, autoplay=False)
         st.components.v1.html(audio_html, height=50)
 
     # Coaching Tips
