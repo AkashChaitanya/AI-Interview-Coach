@@ -148,46 +148,25 @@ Ensure strictly valid JSON without markdown code fences.
 
     def _configured_providers(self):
         selected = self.preferred_model.lower()
-        if "offline" in selected or selected == "none":
-            return []
-
         providers = []
-
-        # If user explicitly selected an env-keyed provider:
-        if "groq" in selected and self.groq_key:
+        # 1. Always try Pollinations (free, no key) FIRST unless user explicitly chose something else
+        if not selected or selected in ("auto", "pollinations", "openai", "gpt"):
+            providers.append(("Pollinations.ai (GPT-4o-mini)", self._call_pollinations))
+        # 2. Env-keyed providers
+        if (not selected or selected == "auto" or "groq" in selected) and self.groq_key:
             providers.append(("Groq (Llama-3.3-70b)", self._call_groq_configured))
-        elif "gemini" in selected and self.gemini_key:
+        if (not selected or selected == "auto" or "gemini" in selected) and self.gemini_key:
             providers.append(("Google Gemini", self._call_gemini_configured))
-        elif "openai" in selected and self.openai_key:
+        if (not selected or selected == "auto" or "openai" in selected) and self.openai_key:
             providers.append(("OpenAI", self._call_openai_compatible))
-        elif "ollama" in selected:
+        if (not selected or selected == "auto" or "ollama" in selected or os.environ.get("OLLAMA_ENABLED", "").lower() == "true"):
             providers.append(("Local Ollama", self._call_ollama_configured))
-
-        # Free Pollinations provider (always enabled and top default)
-        target_model = self.preferred_model if self.preferred_model and self.preferred_model not in ("auto", "none") else FREE_PUBLIC_MODEL
-        if "/" in target_model:
-            target_model = target_model.split("/")[-1]
-        providers.append((
-            f"Pollinations.ai ({target_model})",
-            lambda a, q, e, h: self._call_pollinations(a, q, e, h, model=target_model)
-        ))
-
-        # Fallbacks to any configured env-keyed providers
-        if self.groq_key and ("groq" not in selected):
-            providers.append(("Groq (Llama-3.3-70b)", self._call_groq_configured))
-        if self.gemini_key and ("gemini" not in selected):
-            providers.append(("Google Gemini", self._call_gemini_configured))
-        if self.openai_key and ("openai" not in selected):
-            providers.append(("OpenAI", self._call_openai_compatible))
-        if os.environ.get("OLLAMA_ENABLED", "").lower() == "true" and ("ollama" not in selected):
-            providers.append(("Local Ollama", self._call_ollama_configured))
-
         return providers
 
-    def _call_pollinations(self, answer, question, evaluation, history, model: Optional[str] = None):
+    def _call_pollinations(self, answer, question, evaluation, history):
         details = self._chat_payload(answer, question, evaluation, history)
         payload = {
-            "model": model or FREE_PUBLIC_MODEL,
+            "model": FREE_PUBLIC_MODEL,
             "messages": [
                 {"role": "system", "content": details["system"]},
                 {"role": "user", "content": details["user"]}

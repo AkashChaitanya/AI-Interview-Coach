@@ -7,7 +7,6 @@
 let state = {
   personas: {},
   currentPersonaKey: "Dr. Maya (NLP & Computational Linguistics Expert)",
-  selectedLLMModel: "openai",
   activeQuestions: [],
   currentQIndex: 0,
   sessionHistory: [],
@@ -36,31 +35,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   await startNewSession();
   setupDragAndDrop();
   await loadSavedSessions();
-  await loadLLMModels();
-  checkLLMConnectivity();
-  setInterval(checkLLMConnectivity, 60000);
-
-  document.getElementById("persistSessionToggle")?.addEventListener("change", event => {
+  document.getElementById("persistSessionToggle").addEventListener("change", event => {
     const status = document.getElementById("sessionPersistenceStatus");
-    if (status) {
-      status.innerText = event.target.checked
-        ? "Future answers will be saved locally after each submission."
-        : "Future answers will not be saved; previously saved sessions remain until deleted.";
-    }
+    status.innerText = event.target.checked
+      ? "Future answers will be saved locally after each submission."
+      : "Future answers will not be saved; previously saved sessions remain until deleted.";
   });
-
-  // Close LLM & connectivity panels when clicking outside
+  // Kick off AI connectivity check and repeat every 60 seconds
+  checkAIConnectivity();
+  setInterval(checkAIConnectivity, 60000);
+  // Close connectivity panel when clicking outside
   document.addEventListener("click", (e) => {
-    const llmPanel = document.getElementById("llmPanel");
-    const llmBtn = e.target.closest("[onclick*='toggleLLMPanel']");
-    if (llmPanel && !llmPanel.classList.contains("hidden") && !llmPanel.contains(e.target) && !llmBtn) {
-      llmPanel.classList.add("hidden");
-    }
-
     const panel = document.getElementById("connectivityPanel");
-    const badge = document.getElementById("aiConnectivityBadge");
+    const badge  = document.getElementById("aiConnectivityBadge");
     if (panel && !panel.classList.contains("hidden") &&
-        !panel.contains(e.target) && (!badge || !badge.contains(e.target))) {
+        !panel.contains(e.target) && !badge.contains(e.target)) {
       panel.classList.add("hidden");
     }
   });
@@ -657,7 +646,6 @@ async function submitAnswerForEvaluation() {
         candidate_answer: answer,
         current_question: currentQ,
         nlp_evaluation: evaluation,
-        preferred_model: state.selectedLLMModel || "openai",
         conversation_history: state.sessionHistory.slice(-6).map(turn => ({
           question: turn.question,
           answer: turn.answer
@@ -1649,164 +1637,4 @@ function showToast(message, color = "purple") {
     toast.style.transform = "translateY(4px)";
     setTimeout(() => toast.remove(), 350);
   }, 4000);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ★ FEATURE: Dynamic LLM Model Selector & Autofetch Engine
-// ═══════════════════════════════════════════════════════════════════════════════
-
-let activeLLMModel = "openai";
-
-async function loadLLMModels() {
-  try {
-    const res = await fetch("/api/llm/models");
-    const data = await res.json();
-    const select = document.getElementById("llmModelSelect");
-    if (select && data.models && data.models.length > 0) {
-      select.innerHTML = "";
-      data.models.forEach(m => {
-        const opt = document.createElement("option");
-        opt.value = m.id;
-        opt.innerText = `${m.display}${m.free ? " 🆓" : ""}`;
-        if (m.id === data.default || m.id === activeLLMModel) opt.selected = true;
-        select.appendChild(opt);
-      });
-    }
-    const currentModelId = state.selectedLLMModel || data.default || "openai";
-    const active = (data.models || []).find(m => m.id === currentModelId) || data.models?.[0];
-    if (active) updateLLMBadge(active.display.replace(" 🆓",""), true);
-  } catch (e) {
-    console.warn("Could not fetch LLM models:", e);
-    updateLLMBadge("GPT-4o-mini (Pollinations)", true);
-  }
-}
-
-async function checkLLMConnectivity() {
-  const dot = document.getElementById("llmStatusDot");
-  const label = document.getElementById("llmActiveLabel");
-  if (dot) dot.className = "w-2 h-2 rounded-full bg-slate-500 animate-pulse";
-  if (label && label.innerText === "Loading model...") label.innerText = "Connecting...";
-
-  try {
-    const res = await fetch("/api/ai/connectivity");
-    const data = await res.json();
-    const online = data.online === true;
-
-    updateLLMBadge(
-      online ? (data.model || "Free LLM Connected") : (data.provider !== "None" ? data.provider : "Offline Fallback"),
-      online
-    );
-
-    const panelDot = document.getElementById("llmPanelDot");
-    const statusRow = document.getElementById("llmStatusRow");
-    const statusText = document.getElementById("llmStatusText");
-    const latencyText = document.getElementById("llmLatencyText");
-
-    if (panelDot) panelDot.className = `w-3 h-3 rounded-full ${online ? "bg-emerald-400 animate-pulse" : "bg-amber-400"} shrink-0`;
-    if (statusRow) statusRow.className = `flex items-center gap-3 p-3 rounded-xl ${online ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-amber-500/10 border border-amber-500/20"}`;
-    if (statusText) statusText.innerText = data.status_text || (online ? "Connected — Free LLM Active" : "Offline linguistic mode");
-    if (latencyText) latencyText.innerText = online && data.latency_ms ? `Latency: ${Math.round(data.latency_ms)}ms` : "Fallback active";
-
-  } catch (e) {
-    updateLLMBadge("Connection check error", false);
-  }
-}
-
-function updateLLMBadge(modelName, online) {
-  const dot = document.getElementById("llmStatusDot");
-  const label = document.getElementById("llmActiveLabel");
-  if (dot) dot.className = `w-2 h-2 rounded-full ${online ? "bg-emerald-400 animate-pulse" : "bg-amber-400"} transition-colors`;
-  if (label) label.innerText = modelName;
-}
-
-function toggleLLMPanel() {
-  const panel = document.getElementById("llmPanel");
-  if (panel) panel.classList.toggle("hidden");
-}
-
-function onLLMModelChange() {
-  const select = document.getElementById("llmModelSelect");
-  if (select) {
-    activeLLMModel = select.value;
-    state.selectedLLMModel = activeLLMModel;
-    const text = select.options[select.selectedIndex].text.replace(" 🆓","");
-    updateLLMBadge(text, true);
-    showToast(`🤖 Switched active LLM to: ${text}`, "purple");
-  }
-}
-
-async function recheckLLM() {
-  showToast("🔄 Re-checking LLM connection...", "slate");
-  await checkLLMConnectivity();
-  await loadLLMModels();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ★ FEATURE: Report Preview & PDF Download
-// ═══════════════════════════════════════════════════════════════════════════════
-
-async function previewReport() {
-  if (!state.sessionHistory || state.sessionHistory.length === 0) {
-    showToast("⚠️ Please answer at least one question in the Live Studio first.", "amber");
-    return;
-  }
-
-  const candidateName = document.getElementById("candidateNameInput")?.value?.trim() || "Candidate";
-  const scores = state.sessionHistory.map(h => h.evaluation?.overall_score || 0);
-  const stars = state.sessionHistory.map(h => h.evaluation?.star?.star_score || 0);
-  const wpms = state.sessionHistory.map(h => h.evaluation?.fluency?.estimated_wpm || 135);
-  const fillers = state.sessionHistory.map(h => h.evaluation?.fluency?.filler_count || 0);
-
-  const payload = {
-    candidate_name: candidateName,
-    persona_name: state.currentPersonaKey,
-    session_results: state.sessionHistory,
-    overall_summary: {
-      average_score: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
-      average_star: Math.round(stars.reduce((a, b) => a + b, 0) / stars.length),
-      average_wpm: Math.round(wpms.reduce((a, b) => a + b, 0) / wpms.length),
-      total_fillers: fillers.reduce((a, b) => a + b, 0)
-    }
-  };
-
-  const modal = document.getElementById("reportPreviewModal");
-  const frame = document.getElementById("reportPreviewFrame");
-  const nameEl = document.getElementById("reportCandidateName");
-  if (nameEl) nameEl.innerText = candidateName;
-
-  modal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-
-  try {
-    const res = await fetch("/api/report/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error(`Report generation failed (${res.status})`);
-    const html = await res.text();
-    frame.srcdoc = html;
-  } catch (err) {
-    console.error("Report preview error:", err);
-    frame.srcdoc = `<div style="font-family:sans-serif;padding:30px;color:#dc2626;text-align:center;">
-      <h3>Failed to generate report preview</h3>
-      <p>${err.message}</p>
-    </div>`;
-  }
-}
-
-function closeReportPreview() {
-  const modal = document.getElementById("reportPreviewModal");
-  if (modal) modal.classList.add("hidden");
-  document.body.style.overflow = "";
-}
-
-function downloadReportPDF() {
-  const frame = document.getElementById("reportPreviewFrame");
-  if (frame && frame.contentWindow) {
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-  } else {
-    showToast("⚠️ Unable to trigger print dialog directly. Please use Ctrl+P.", "amber");
-  }
 }

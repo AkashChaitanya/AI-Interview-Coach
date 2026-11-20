@@ -76,7 +76,6 @@ class ChatRequest(BaseModel):
     current_question: Dict[str, Any]
     nlp_evaluation: Dict[str, Any]
     conversation_history: List[Dict[str, Any]] = Field(default_factory=list, max_length=12)
-    preferred_model: Optional[str] = Field(default="auto", max_length=100)
 
 class TTSRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
@@ -125,8 +124,7 @@ def health_check():
         "app": config.APP_TITLE,
         "version": config.APP_VERSION,
         "total_questions": len(question_bank),
-        "ai_autofetch_active": True,
-        "default_free_model": "GPT-4o-mini via Pollinations.ai",
+        "ai_autofetch_active": False,
         "configured_ai_providers": configured_providers,
         "offline_feedback_available": True
     }
@@ -262,10 +260,7 @@ def chat_with_interviewer(req: ChatRequest):
     Validates candidate response and generates conversational interviewer feedback.
     Real AI validation for correct, partially correct, wrong, or creative answers.
     """
-    agent = ConversationAgent(
-        persona_name=req.persona_name,
-        preferred_model=req.preferred_model or "auto"
-    )
+    agent = ConversationAgent(persona_name=req.persona_name)
     response_data = agent.generate_response(
         candidate_answer=req.candidate_answer,
         current_question=req.current_question,

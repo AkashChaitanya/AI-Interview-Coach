@@ -127,6 +127,182 @@ class ReportGenerator:
         self,
         candidate_name: str,
         persona_name: str,
+        session_results: list,
+        overall_summary: dict
+    ) -> str:
+        """Generates a beautiful print-ready HTML report."""
+        from datetime import datetime
+        date_str = datetime.now().strftime("%B %d, %Y")
+        
+        avg_score = overall_summary.get("average_score", 0)
+        avg_star = overall_summary.get("average_star", 0)
+        avg_wpm = overall_summary.get("average_wpm", 0)
+        total_fillers = overall_summary.get("total_fillers", 0)
+        
+        # Score color
+        if avg_score >= 80: score_color = "#10B981"; rating = "Exceptional"
+        elif avg_score >= 60: score_color = "#06B6D4"; rating = "Proficient"  
+        elif avg_score >= 40: score_color = "#F59E0B"; rating = "Developing"
+        else: score_color = "#EF4444"; rating = "Needs Work"
+        
+        # Build per-question sections
+        q_sections = ""
+        for i, item in enumerate(session_results, 1):
+            q = item.get("question", {})
+            ev = item.get("evaluation", {})
+            ai = item.get("aiReply", {})
+            score = round(ev.get("overall_score", 0))
+            star = round(ev.get("star", {}).get("star_score", 0))
+            wpm = ev.get("fluency", {}).get("estimated_wpm", 0)
+            fillers = ev.get("fluency", {}).get("filler_count", 0)
+            verdict = ai.get("validation_verdict", "Analyzed")
+            feedback = ai.get("conversational_feedback", "")
+            follow_up = ai.get("follow_up_question", "")
+            exemplar = ai.get("model_exemplar_answer", "")
+            
+            # Verdict badge color
+            verdict_colors = {
+                "Strong / Correct": "#10B981",
+                "Factually Incorrect": "#EF4444",
+                "Creative / Unconventional": "#F59E0B",
+                "Partially Correct": "#06B6D4",
+                "Off-Topic / Vague": "#94A3B8"
+            }
+            v_color = verdict_colors.get(verdict, "#8B5CF6")
+            
+            # Score ring color
+            s_color = "#10B981" if score >= 80 else "#06B6D4" if score >= 60 else "#F59E0B" if score >= 40 else "#EF4444"
+            
+            # STAR sentences
+            tagged = ev.get("star", {}).get("tagged_sentences", [])
+            star_html = ""
+            tag_colors = {"Situation": "#8B5CF6", "Task": "#06B6D4", "Action": "#10B981", "Result": "#F59E0B"}
+            for t in tagged:
+                tc = tag_colors.get(t.get("tag",""), "#94A3B8")
+                star_html += f'<div style="margin-bottom:4px"><span style="background:{tc}22;color:{tc};font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:6px;text-transform:uppercase">{t.get("tag","?")}</span><span style="font-size:12px;color:#374151">{t.get("sentence","")}</span></div>'
+            
+            q_sections += f"""
+        <div style="page-break-inside:avoid;margin-bottom:32px;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden">
+          <!-- Q Header -->
+          <div style="background:linear-gradient(135deg,#F8F9FF,#F0F4FF);padding:16px 20px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <span style="font-size:10px;font-weight:700;color:#8B5CF6;text-transform:uppercase;letter-spacing:0.5px">Question {i} · {q.get("category","Technical")} · {q.get("difficulty","Mid")}</span>
+              <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#111827;line-height:1.4">{q.get("question","")}</p>
+            </div>
+            <div style="text-align:center;min-width:60px">
+              <div style="font-size:28px;font-weight:900;color:{s_color};font-family:monospace;line-height:1">{score}</div>
+              <div style="font-size:9px;color:#6B7280;text-transform:uppercase">Score</div>
+            </div>
+          </div>
+          
+          <!-- AI Verdict -->
+          <div style="padding:12px 20px;background:#FAFAFA;border-bottom:1px solid #F3F4F6;display:flex;align-items:center;gap:12px">
+            <span style="background:{v_color}22;color:{v_color};font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid {v_color}44;text-transform:uppercase;white-space:nowrap">AI: {verdict}</span>
+            <p style="margin:0;font-size:12px;color:#374151;line-height:1.5;font-style:italic">"{feedback}"</p>
+          </div>
+          
+          <!-- Stats Row -->
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);padding:12px 20px;gap:12px;border-bottom:1px solid #F3F4F6">
+            <div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#06B6D4;font-family:monospace">{star}%</div><div style="font-size:9px;color:#9CA3AF;text-transform:uppercase">STAR Score</div></div>
+            <div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#8B5CF6;font-family:monospace">{wpm} WPM</div><div style="font-size:9px;color:#9CA3AF;text-transform:uppercase">Speaking Rate</div></div>
+            <div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#F59E0B;font-family:monospace">{fillers}</div><div style="font-size:9px;color:#9CA3AF;text-transform:uppercase">Filler Words</div></div>
+          </div>
+          
+          <!-- STAR Breakdown -->
+          {"<div style='padding:12px 20px;border-bottom:1px solid #F3F4F6'><div style='font-size:10px;font-weight:700;color:#374151;text-transform:uppercase;margin-bottom:8px'>STAR Sentence Classification</div>" + star_html + "</div>" if star_html else ""}
+          
+          <!-- Exemplar + Follow-up -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+            {"<div style='padding:14px 20px;border-right:1px solid #F3F4F6'><div style='font-size:10px;font-weight:700;color:#F59E0B;text-transform:uppercase;margin-bottom:6px'>⭐ Model Exemplar Answer</div><p style='margin:0;font-size:11px;color:#374151;line-height:1.6'>" + exemplar + "</p></div>" if exemplar else ""}
+            {"<div style='padding:14px 20px'><div style='font-size:10px;font-weight:700;color:#8B5CF6;text-transform:uppercase;margin-bottom:6px'>🔍 Interviewer Follow-up</div><p style='margin:0;font-size:11px;color:#374151;line-height:1.6;font-style:italic'>\"" + follow_up + "\"</p></div>" if follow_up else ""}
+          </div>
+        </div>
+        """
+        
+        # Overall strengths / recommendations based on scores
+        recommendations = []
+        if avg_star < 60: recommendations.append("Practice structuring answers using the STAR framework (Situation, Task, Action, Result).")
+        if total_fillers > 5: recommendations.append(f"Reduce verbal filler words ({total_fillers} detected). Practice deliberate pausing instead.")
+        if avg_wpm > 180: recommendations.append("Speaking rate is high. Aim for 140-170 WPM for clarity and emphasis.")
+        if avg_wpm < 100 and avg_wpm > 0: recommendations.append("Speaking pace is slow. Confidence-building practice can help increase fluency.")
+        if avg_score >= 75: recommendations.append("Strong overall performance. Focus on quantifying business impact in behavioral answers.")
+        if not recommendations: recommendations.append("Continue practicing with varied question types and domains to maintain sharpness.")
+        
+        recs_html = "".join(f'<li style="margin-bottom:6px;font-size:12px;color:#374151">{r}</li>' for r in recommendations)
+        
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Interview Assessment — {candidate_name}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: 'Plus Jakarta Sans', sans-serif; background: #FFFFFF; color: #111827; line-height: 1.6; }}
+  @page {{ margin: 20mm; }}
+  @media print {{ .no-print {{ display: none !important; }} body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }} }}
+</style>
+</head>
+<body style="max-width:860px;margin:0 auto;padding:40px 32px">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;padding-bottom:24px;border-bottom:3px solid #8B5CF6">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#8B5CF6;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">AI Interview Coach Assessment</div>
+      <h1 style="font-size:28px;font-weight:800;color:#111827;line-height:1.2">{candidate_name}</h1>
+      <p style="font-size:13px;color:#6B7280;margin-top:4px">Interviewed by {persona_name.split("(")[0].strip()} · {date_str}</p>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:48px;font-weight:900;color:{score_color};font-family:'JetBrains Mono',monospace;line-height:1">{avg_score}</div>
+      <div style="font-size:11px;font-weight:700;color:{score_color};text-transform:uppercase">{rating}</div>
+      <div style="font-size:10px;color:#9CA3AF">Overall Score / 100</div>
+    </div>
+  </div>
+
+  <!-- Summary Metrics -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px">
+    <div style="background:linear-gradient(135deg,#F0F9FF,#E0F2FE);border:1px solid #BAE6FD;border-radius:12px;padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:800;color:#0284C7;font-family:monospace">{avg_star}%</div>
+      <div style="font-size:10px;color:#0369A1;font-weight:600;text-transform:uppercase;margin-top:2px">STAR Adherence</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#F5F3FF,#EDE9FE);border:1px solid #DDD6FE;border-radius:12px;padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:800;color:#7C3AED;font-family:monospace">{avg_wpm}</div>
+      <div style="font-size:10px;color:#6D28D9;font-weight:600;text-transform:uppercase;margin-top:2px">Avg WPM</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:1px solid #FDE68A;border-radius:12px;padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:800;color:#D97706;font-family:monospace">{total_fillers}</div>
+      <div style="font-size:10px;color:#B45309;font-weight:600;text-transform:uppercase;margin-top:2px">Filler Words</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#F0FDF4,#DCFCE7);border:1px solid #BBF7D0;border-radius:12px;padding:16px;text-align:center">
+      <div style="font-size:24px;font-weight:800;color:#16A34A;font-family:monospace">{len(session_results)}</div>
+      <div style="font-size:10px;color:#15803D;font-weight:600;text-transform:uppercase;margin-top:2px">Questions Done</div>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div style="margin-bottom:32px;background:#FAFAFA;border:1px solid #E5E7EB;border-radius:12px;padding:20px">
+    <h3 style="font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">🎯 AI Coaching Recommendations</h3>
+    <ul style="padding-left:20px;list-style:disc">{recs_html}</ul>
+  </div>
+
+  <!-- Per-Question Breakdown -->
+  <h2 style="font-size:16px;font-weight:700;color:#111827;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #E5E7EB">📋 Question-by-Question Breakdown</h2>
+  {q_sections}
+
+  <!-- Footer -->
+  <div style="margin-top:40px;padding-top:16px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:10px;color:#9CA3AF">AI Interview Coach · Computational Linguistics &amp; AI Platform · 100% Free &amp; Open Source</span>
+    <span style="font-size:10px;color:#9CA3AF;font-family:monospace">Generated {date_str}</span>
+  </div>
+
+</body>
+</html>"""
+
+    def generate_html_report(
+        self,
+        candidate_name: str,
+        persona_name: str,
         session_results: List[Dict[str, Any]],
         overall_summary: Dict[str, Any]
     ) -> str:

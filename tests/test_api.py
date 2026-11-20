@@ -26,7 +26,7 @@ client = TestClient(app)
 def test_health_check_function():
     data = health_check()
     assert data["status"] == "healthy"
-    assert "ai_autofetch_active" in data
+    assert data["ai_autofetch_active"] is False
     assert data["offline_feedback_available"] is True
     assert data["total_questions"] >= 200
 
@@ -61,7 +61,6 @@ def test_evaluate_answer_function():
 def test_chat_with_interviewer_function():
     req = ChatRequest(
         persona_name="Dr. Maya (NLP & Computational Linguistics Expert)",
-        preferred_model="offline",
         candidate_answer="I utilized Byte Pair Encoding subword tokenization and trained transformer attention embeddings.",
         current_question={
             "question": "Explain subword tokenization in NLP.",

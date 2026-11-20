@@ -690,11 +690,7 @@
           <h4 class="font-bold text-white text-sm">Download Official Assessment Report</h4>
           <p class="text-xs text-slate-400">Export complete linguistic breakdowns, STAR scores, and personalized coaching recommendations.</p>
         </div>
-        <div class="flex items-center flex-wrap gap-3">
-          <button onclick="previewReport()" class="bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:opacity-95 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-purple-600/25 flex items-center gap-2 transition-all">
-            <i data-lucide="eye" class="w-4 h-4 text-cyan-300"></i>
-            <span>Preview &amp; PDF Report</span>
-          </button>
+        <div class="flex items-center gap-3">
           <button onclick="downloadReport('markdown')" class="bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all">
             <i data-lucide="file-down" class="w-4 h-4 text-purple-400"></i>
             <span>Export Markdown (.md)</span>
@@ -938,40 +934,6 @@
           <span id="savePersonaSpinner" class="hidden animate-spin">⟳</span>
           <span>Save Interviewer</span>
         </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ★ Report Preview & PDF Modal -->
-  <div id="reportPreviewModal" class="hidden fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex flex-col p-2 sm:p-5">
-    <div class="max-w-5xl w-full mx-auto flex-1 flex flex-col bg-[#0E131F] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-      <!-- Modal Header -->
-      <div class="flex items-center justify-between px-6 py-4 bg-[#07090E]/95 border-b border-white/10">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
-            <i data-lucide="file-text" class="w-4 h-4"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-sm text-white flex items-center gap-2">
-              <span>Interview Assessment Report</span>
-              <span id="reportCandidateName" class="text-xs font-mono text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20"></span>
-            </h3>
-            <p class="text-[11px] text-slate-400">Comprehensive AI &amp; linguistic feedback analysis. Print or save directly to PDF.</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2.5">
-          <button onclick="downloadReportPDF()" class="bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:opacity-95 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-600/25 transition-all">
-            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
-            <span>Print / Save PDF</span>
-          </button>
-          <button onclick="closeReportPreview()" class="text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl text-xs transition-colors">
-            ✕ Close
-          </button>
-        </div>
-      </div>
-      <!-- Report iframe -->
-      <div class="flex-1 bg-slate-900 relative">
-        <iframe id="reportPreviewFrame" class="w-full h-full border-0 bg-white" title="Report Preview"></iframe>
       </div>
     </div>
   </div>
